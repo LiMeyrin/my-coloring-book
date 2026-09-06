@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Мои Раскраски</title>
   <!-- Подключаем PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -13,20 +13,21 @@
       --primary: #6c5ce7;
       --primary-hover: #5a4bcf;
     }
+    * { touch-action: manipulation; box-sizing: border-box; }
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      margin: 0; padding: 20px;
+      margin: 0; padding: 15px;
       background-color: var(--bg-color);
       color: #333;
     }
     .hidden { display: none !important; }
-    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
     
-    /* Кнопки и элементы */
+    /* Кнопки */
     .btn {
       background: var(--primary); color: white; border: none;
-      padding: 10px 18px; border-radius: 8px; cursor: pointer;
-      font-weight: 600; transition: background 0.2s;
+      padding: 10px 16px; border-radius: 8px; cursor: pointer;
+      font-weight: 600; transition: background 0.2s; font-size: 14px;
     }
     .btn:hover { background: var(--primary-hover); }
     .btn-secondary { background: #b2bec3; }
@@ -35,38 +36,68 @@
     /* Сетки */
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-      gap: 20px;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 15px;
     }
     .card {
-      background: var(--card-bg); border-radius: 12px; padding: 12px;
+      background: var(--card-bg); border-radius: 12px; padding: 10px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.05); text-align: center;
       cursor: pointer; transition: transform 0.2s;
     }
-    .card:hover { transform: translateY(-4px); }
-    .card img { width: 100%; height: 200px; object-fit: cover; border-radius: 8px; }
+    .card:hover { transform: translateY(-3px); }
+    .card img { width: 100%; height: 160px; object-fit: cover; border-radius: 8px; }
 
     /* Модалка страницы */
     .modal {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.7); display: flex;
+      background: rgba(0,0,0,0.8); display: flex;
       flex-direction: column; justify-content: center; align-items: center; z-index: 100;
+      padding: 15px;
     }
-    .modal img { max-width: 80vw; max-height: 70vh; border-radius: 8px; background: white; }
-    .modal-actions { margin-top: 20px; display: flex; gap: 10px; }
+    .modal img { max-width: 90vw; max-height: 65vh; border-radius: 8px; background: white; object-fit: contain; }
+    .modal-actions { margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 
-    /* Редактор */
-    #editor-view { display: flex; gap: 20px; height: 85vh; }
-    .toolbar {
-      width: 220px; background: white; padding: 15px; border-radius: 12px;
-      display: flex; flex-direction: column; gap: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-      overflow-y: auto;
+    /* Редактор адаптивный */
+    #editor-view { 
+      display: flex; 
+      flex-direction: row; 
+      gap: 15px; 
+      height: calc(100vh - 30px); 
     }
-    .toolbar label { font-size: 14px; font-weight: 600; }
-    .toolbar select, .toolbar input[type="range"] { width: 100%; }
     
-    .canvas-container { flex: 1; display: flex; justify-content: center; align-items: center; overflow: auto; background: #eef2f5; border-radius: 12px; padding: 10px; }
-    canvas { background: white; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); cursor: crosshair; }
+    .toolbar {
+      width: 220px; background: white; padding: 12px; border-radius: 12px;
+      display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      overflow-y: auto; flex-shrink: 0;
+    }
+    .toolbar label { font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; }
+    .toolbar select, .toolbar input[type="range"] { width: 100%; margin-top: 4px; }
+    
+    .canvas-wrapper { 
+      flex: 1; 
+      display: flex; 
+      justify-content: center; 
+      align-items: flex-start; 
+      overflow: auto; 
+      background: #eef2f5; 
+      border-radius: 12px; 
+      padding: 20px; 
+      position: relative;
+    }
+    
+    canvas { 
+      background: white; 
+      border-radius: 8px; 
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
+      touch-action: none; /* Запрещает прокрутку пальцем при рисовании */
+      transform-origin: top left;
+    }
+
+    /* Адаптация для мобильных (панель сверху) */
+    @media (max-width: 768px) {
+      #editor-view { flex-direction: column; }
+      .toolbar { width: 100%; max-height: 200px; }
+    }
   </style>
 </head>
 <body>
@@ -84,14 +115,14 @@
   <!-- 2. СТРАНИЦА КНИГИ -->
   <div id="book-view" class="hidden">
     <header>
-      <button class="btn btn-secondary" onclick="showView('main-view')">← К списку раскрасок</button>
+      <button class="btn btn-secondary" onclick="showView('main-view')">← К списку</button>
       <h2 id="book-title">Название книги</h2>
       <div>
         Масштаб: 
         <select id="scale-select" onchange="changeScale(this.value)">
           <option value="1">100%</option>
-          <option value="1.5">150%</option>
-          <option value="2">200%</option>
+          <option value="1.3">130%</option>
+          <option value="1.6">160%</option>
         </select>
       </div>
     </header>
@@ -125,14 +156,18 @@
       <label>Размер: <span id="brush-size-val">10</span>px</label>
       <input type="range" id="brush-size" min="1" max="60" value="10" oninput="document.getElementById('brush-size-val').innerText = this.value">
 
+      <label>🔍 Приближение: <span id="zoom-val">100</span>%</label>
+      <input type="range" id="editor-zoom" min="50" max="300" value="100" oninput="setCanvasZoom(this.value)">
+
       <button class="btn btn-secondary" onclick="activateEyedropper()">🔍 Пипетка</button>
       
-      <hr style="width:100%; border: 0.5px solid #eee;">
+      <hr style="width:100%; border: 0.5px solid #eee; margin: 5px 0;">
       
       <button class="btn" onclick="saveDrawing()">💾 Сохранить</button>
       <button class="btn btn-secondary" onclick="closeEditor()">← Назад</button>
     </div>
-    <div class="canvas-container">
+    
+    <div class="canvas-wrapper" id="canvas-wrapper">
       <canvas id="paint-canvas"></canvas>
     </div>
   </div>
@@ -147,8 +182,8 @@
     let ctx;
     let lastX = 0, lastY = 0;
     let lastTime = 0;
+    let currentZoom = 1;
 
-    // База данных
     const request = indexedDB.open("ColoringAppDB", 1);
     request.onupgradeneeded = (e) => {
       db = e.target.result;
@@ -164,7 +199,6 @@
       document.getElementById(viewId).classList.remove('hidden');
     }
 
-    // Загрузка PDF
     async function uploadPDF(event) {
       const file = event.target.files[0];
       if (!file) return;
@@ -273,12 +307,16 @@
       modal.classList.remove('hidden');
     }
 
-    // РЕДАКТОР И КИСТИ
+    // РЕДАКТОР И РИСОВАНИЕ (Мышь + Сенсор)
     function startDrawing() {
       showView('editor-view');
       const canvas = document.getElementById('paint-canvas');
       ctx = canvas.getContext('2d');
       const page = currentBook.pages[currentPageIndex];
+
+      // Сброс масштаба при открытии
+      document.getElementById('editor-zoom').value = 100;
+      setCanvasZoom(100);
 
       const img = new Image();
       img.onload = () => {
@@ -288,24 +326,57 @@
       };
       img.src = page.progress || page.original;
 
-      canvas.onmousedown = (e) => {
-        isDrawing = true;
-        const rect = canvas.getBoundingClientRect();
-        lastX = e.clientX - rect.left;
-        lastY = e.clientY - rect.top;
-        lastTime = Date.now();
-        draw(e);
+      // События мыши
+      canvas.onmousedown = startStroke;
+      canvas.onmousemove = moveStroke;
+      canvas.onmouseup = endStroke;
+
+      // Сенсорные события (Тачскрин для телефонов/планшетов)
+      canvas.ontouchstart = (e) => { e.preventDefault(); startStroke(e.touches[0]); };
+      canvas.ontouchmove = (e) => { e.preventDefault(); moveStroke(e.touches[0]); };
+      canvas.ontouchend = endStroke;
+    }
+
+    function setCanvasZoom(val) {
+      currentZoom = val / 100;
+      document.getElementById('zoom-val').innerText = val;
+      const canvas = document.getElementById('paint-canvas');
+      canvas.style.transform = `scale(${currentZoom})`;
+    }
+
+    function getCoords(e) {
+      const canvas = document.getElementById('paint-canvas');
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: (e.clientX - rect.left) / currentZoom,
+        y: (e.clientY - rect.top) / currentZoom
       };
-      canvas.onmousemove = draw;
-      canvas.onmouseup = () => { isDrawing = false; ctx.beginPath(); };
+    }
+
+    function startStroke(e) {
+      isDrawing = true;
+      const coords = getCoords(e);
+      lastX = coords.x;
+      lastY = coords.y;
+      lastTime = Date.now();
+      draw(e);
+    }
+
+    function moveStroke(e) {
+      if (!isDrawing) return;
+      draw(e);
+    }
+
+    function endStroke() {
+      isDrawing = false;
+      if (ctx) ctx.beginPath();
     }
 
     function draw(e) {
       if (!isDrawing) return;
-      const canvas = document.getElementById('paint-canvas');
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+      const coords = getCoords(e);
+      const x = coords.x;
+      const y = coords.y;
 
       const color = document.getElementById('color-picker').value;
       const baseSize = parseInt(document.getElementById('brush-size').value);
@@ -327,7 +398,7 @@
       } else if (type === 'pencil') {
         ctx.lineWidth = Math.max(1, baseSize * 0.5);
         ctx.lineCap = 'round';
-        ctx.globalAlpha = 0.4; // легкая прозрачность карандаша
+        ctx.globalAlpha = 0.4;
         ctx.shadowBlur = 0;
         ctx.beginPath();
         ctx.moveTo(lastX, lastY);
@@ -336,7 +407,6 @@
         ctx.globalAlpha = 1.0;
 
       } else if (type === 'chisel') {
-        // Косая кисть (срезанный маркер)
         ctx.lineWidth = baseSize;
         ctx.lineCap = 'square';
         ctx.shadowBlur = 0;
@@ -346,13 +416,11 @@
         ctx.stroke();
 
       } else if (type === 'japanese') {
-        // Японская тушь: толщина зависит от скорости движения
         const now = Date.now();
         const dist = Math.hypot(x - lastX, y - lastY);
         const time = Math.max(1, now - lastTime);
         const speed = dist / time;
         
-        // Чем быстрее, тем тоньше линия
         const dynamicSize = Math.max(2, baseSize - speed * 3);
         ctx.lineWidth = dynamicSize;
         ctx.lineCap = 'round';
@@ -365,7 +433,6 @@
         lastTime = now;
 
       } else if (type === 'soft') {
-        // Акварель/Мягкая кисть с размытием
         ctx.lineWidth = baseSize;
         ctx.lineCap = 'round';
         ctx.globalAlpha = 0.2;
@@ -379,7 +446,6 @@
         ctx.shadowBlur = 0;
 
       } else if (type === 'spray') {
-        // Аэрограф / Спрей
         ctx.shadowBlur = 0;
         const density = baseSize * 2;
         for (let i = 0; i < density; i++) {
@@ -395,7 +461,6 @@
       lastY = y;
     }
 
-    // Пипетка
     async function activateEyedropper() {
       if ('EyeDropper' in window) {
         const eyeDropper = new EyeDropper();
@@ -404,11 +469,10 @@
           document.getElementById('color-picker').value = result.sRGBHex;
         } catch (e) { console.log("Отмена"); }
       } else {
-        alert("Пипетка поддерживает только современные браузеры на базе Chrome/Edge.");
+        alert("Пипетка поддерживает мобильные браузеры Chrome/Edge.");
       }
     }
 
-    // Сохранение
     function saveDrawing() {
       const canvas = document.getElementById('paint-canvas');
       currentBook.pages[currentPageIndex].progress = canvas.toDataURL();

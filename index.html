@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Мои Раскраски</title>
+  <!-- Подключаем PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <style>
     :root {
@@ -21,7 +22,7 @@
     .hidden { display: none !important; }
     header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
     
-    /* Кнопки и контролы */
+    /* Кнопки и элементы */
     .btn {
       background: var(--primary); color: white; border: none;
       padding: 10px 18px; border-radius: 8px; cursor: pointer;
@@ -31,7 +32,7 @@
     .btn-secondary { background: #b2bec3; }
     .btn-danger { background: #ff7675; }
 
-    /* Сетки файлов и страниц */
+    /* Сетки */
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -45,7 +46,7 @@
     .card:hover { transform: translateY(-4px); }
     .card img { width: 100%; height: 200px; object-fit: cover; border-radius: 8px; }
 
-    /* Модальное окно просмотра страницы */
+    /* Модалка страницы */
     .modal {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
       background: rgba(0,0,0,0.7); display: flex;
@@ -54,18 +55,23 @@
     .modal img { max-width: 80vw; max-height: 70vh; border-radius: 8px; background: white; }
     .modal-actions { margin-top: 20px; display: flex; gap: 10px; }
 
-    /* Редактор рисования */
-    #editor-view { display: flex; gap: 20px; height: 80vh; }
+    /* Редактор */
+    #editor-view { display: flex; gap: 20px; height: 85vh; }
     .toolbar {
-      width: 180px; background: white; padding: 15px; border-radius: 12px;
-      display: flex; flex-direction: column; gap: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      width: 220px; background: white; padding: 15px; border-radius: 12px;
+      display: flex; flex-direction: column; gap: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      overflow-y: auto;
     }
-    .canvas-container { flex: 1; display: flex; justify-content: center; align-items: center; overflow: auto; }
+    .toolbar label { font-size: 14px; font-weight: 600; }
+    .toolbar select, .toolbar input[type="range"] { width: 100%; }
+    
+    .canvas-container { flex: 1; display: flex; justify-content: center; align-items: center; overflow: auto; background: #eef2f5; border-radius: 12px; padding: 10px; }
     canvas { background: white; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); cursor: crosshair; }
   </style>
 </head>
 <body>
 
+  <!-- 1. ГЛАВНАЯ СТРАНИЦА -->
   <div id="main-view">
     <header>
       <h1>🎨 Мои Раскраски</h1>
@@ -75,6 +81,7 @@
     <div id="pdf-grid" class="grid"></div>
   </div>
 
+  <!-- 2. СТРАНИЦА КНИГИ -->
   <div id="book-view" class="hidden">
     <header>
       <button class="btn btn-secondary" onclick="showView('main-view')">← К списку раскрасок</button>
@@ -91,18 +98,37 @@
     <div id="pages-grid" class="grid"></div>
   </div>
 
+  <!-- МОДАЛЬНОЕ ОКНО -->
   <div id="page-modal" class="modal hidden">
     <img id="modal-img" src="" alt="Страница">
     <div class="modal-actions" id="modal-actions"></div>
   </div>
 
+  <!-- 3. РЕДАКТОР РИСОВАНИЯ -->
   <div id="editor-view" class="hidden">
     <div class="toolbar">
       <h3>Инструменты</h3>
-      <label>Кисть: <input type="color" id="color-picker" value="#ff0000"></label>
-      <label>Размер: <input type="range" id="brush-size" min="1" max="50" value="5"></label>
+      
+      <label>Тип кисти:</label>
+      <select id="brush-type">
+        <option value="round">⚪ Круглая кисть</option>
+        <option value="pencil">✏️ Карандаш</option>
+        <option value="chisel">✒️ Косая кисть / Маркер</option>
+        <option value="japanese">🖌️ Японская тушь</option>
+        <option value="soft">☁️ Акварель / Мягкая</option>
+        <option value="spray">💨 Аэрограф / Спрей</option>
+      </select>
+
+      <label>Цвет:</label>
+      <input type="color" id="color-picker" value="#ff0000">
+
+      <label>Размер: <span id="brush-size-val">10</span>px</label>
+      <input type="range" id="brush-size" min="1" max="60" value="10" oninput="document.getElementById('brush-size-val').innerText = this.value">
+
       <button class="btn btn-secondary" onclick="activateEyedropper()">🔍 Пипетка</button>
-      <hr style="width:100%">
+      
+      <hr style="width:100%; border: 0.5px solid #eee;">
+      
       <button class="btn" onclick="saveDrawing()">💾 Сохранить</button>
       <button class="btn btn-secondary" onclick="closeEditor()">← Назад</button>
     </div>
@@ -119,8 +145,10 @@
     let currentPageIndex = null;
     let isDrawing = false;
     let ctx;
+    let lastX = 0, lastY = 0;
+    let lastTime = 0;
 
-    // Инициализация IndexedDB для хранения файлов и прогресса
+    // База данных
     const request = indexedDB.open("ColoringAppDB", 1);
     request.onupgradeneeded = (e) => {
       db = e.target.result;
@@ -136,7 +164,7 @@
       document.getElementById(viewId).classList.remove('hidden');
     }
 
-    // Загрузка и обработка PDF
+    // Загрузка PDF
     async function uploadPDF(event) {
       const file = event.target.files[0];
       if (!file) return;
@@ -148,7 +176,7 @@
       const pages = [];
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 1 });
+        const viewport = page.getViewport({ scale: 1.5 });
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
         canvas.height = viewport.height;
@@ -163,7 +191,6 @@
       tx.oncomplete = () => loadBooks();
     }
 
-    // Отображение списка книг
     function loadBooks() {
       const tx = db.transaction("books", "readonly");
       const store = tx.objectStore("books");
@@ -181,7 +208,6 @@
       };
     }
 
-    // Открытие конкретной книги
     function openBook(book) {
       currentBook = book;
       document.getElementById('book-title').innerText = book.title;
@@ -202,7 +228,6 @@
       });
     }
 
-    // Модальное окно с выбором кнопок
     function openModal(index) {
       currentPageIndex = index;
       const page = currentBook.pages[index];
@@ -248,7 +273,7 @@
       modal.classList.remove('hidden');
     }
 
-    // Редактор рисования
+    // РЕДАКТОР И КИСТИ
     function startDrawing() {
       showView('editor-view');
       const canvas = document.getElementById('paint-canvas');
@@ -263,8 +288,14 @@
       };
       img.src = page.progress || page.original;
 
-      // Логика рисования
-      canvas.onmousedown = (e) => { isDrawing = true; draw(e); };
+      canvas.onmousedown = (e) => {
+        isDrawing = true;
+        const rect = canvas.getBoundingClientRect();
+        lastX = e.clientX - rect.left;
+        lastY = e.clientY - rect.top;
+        lastTime = Date.now();
+        draw(e);
+      };
       canvas.onmousemove = draw;
       canvas.onmouseup = () => { isDrawing = false; ctx.beginPath(); };
     }
@@ -276,30 +307,108 @@
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
 
-      ctx.lineWidth = document.getElementById('brush-size').value;
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = document.getElementById('color-picker').value;
+      const color = document.getElementById('color-picker').value;
+      const baseSize = parseInt(document.getElementById('brush-size').value);
+      const type = document.getElementById('brush-type').value;
 
-      ctx.lineTo(x, y);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(x, y);
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+
+      if (type === 'round') {
+        ctx.lineWidth = baseSize;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+
+      } else if (type === 'pencil') {
+        ctx.lineWidth = Math.max(1, baseSize * 0.5);
+        ctx.lineCap = 'round';
+        ctx.globalAlpha = 0.4; // легкая прозрачность карандаша
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.globalAlpha = 1.0;
+
+      } else if (type === 'chisel') {
+        // Косая кисть (срезанный маркер)
+        ctx.lineWidth = baseSize;
+        ctx.lineCap = 'square';
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+
+      } else if (type === 'japanese') {
+        // Японская тушь: толщина зависит от скорости движения
+        const now = Date.now();
+        const dist = Math.hypot(x - lastX, y - lastY);
+        const time = Math.max(1, now - lastTime);
+        const speed = dist / time;
+        
+        // Чем быстрее, тем тоньше линия
+        const dynamicSize = Math.max(2, baseSize - speed * 3);
+        ctx.lineWidth = dynamicSize;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        lastTime = now;
+
+      } else if (type === 'soft') {
+        // Акварель/Мягкая кисть с размытием
+        ctx.lineWidth = baseSize;
+        ctx.lineCap = 'round';
+        ctx.globalAlpha = 0.2;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = baseSize / 2;
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.globalAlpha = 1.0;
+        ctx.shadowBlur = 0;
+
+      } else if (type === 'spray') {
+        // Аэрограф / Спрей
+        ctx.shadowBlur = 0;
+        const density = baseSize * 2;
+        for (let i = 0; i < density; i++) {
+          const offsetX = (Math.random() - 0.5) * baseSize * 2;
+          const offsetY = (Math.random() - 0.5) * baseSize * 2;
+          if (Math.hypot(offsetX, offsetY) <= baseSize) {
+            ctx.fillRect(x + offsetX, y + offsetY, 1, 1);
+          }
+        }
+      }
+
+      lastX = x;
+      lastY = y;
     }
 
-    // Пипетка (EyeDropper API)
+    // Пипетка
     async function activateEyedropper() {
       if ('EyeDropper' in window) {
         const eyeDropper = new EyeDropper();
         try {
           const result = await eyeDropper.open();
           document.getElementById('color-picker').value = result.sRGBHex;
-        } catch (e) { console.log("Пипетка отменена"); }
+        } catch (e) { console.log("Отмена"); }
       } else {
-        alert("Ваш браузер не поддерживает встроенную пипетку.");
+        alert("Пипетка поддерживает только современные браузеры на базе Chrome/Edge.");
       }
     }
 
-    // Сохранение и синхронизация
+    // Сохранение
     function saveDrawing() {
       const canvas = document.getElementById('paint-canvas');
       currentBook.pages[currentPageIndex].progress = canvas.toDataURL();

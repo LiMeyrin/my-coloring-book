@@ -94,7 +94,7 @@
 
     @media (max-width: 768px) {
       #editor-view { flex-direction: column; }
-      .toolbar { width: 100%; max-height: 220px; }
+      .toolbar { width: 100%; max-height: 240px; }
     }
   </style>
 </head>
@@ -155,6 +155,7 @@
       <input type="range" id="editor-zoom" min="50" max="300" value="100" oninput="setCanvasZoom(this.value)">
 
       <button class="btn btn-secondary" onclick="activateEyedropper()">🔍 Пипетка</button>
+      <button class="btn btn-secondary" onclick="undoStroke()">⎌ Отменить</button>
       
       <hr style="width:100%; border: 0.5px solid #eee; margin: 5px 0;">
       
@@ -179,6 +180,10 @@
     let lastTime = 0;
     let currentZoom = 1;
     let currentLineWidth = 10;
+    
+    // Массив истории для отмены
+    let undoHistory = [];
+    const MAX_UNDO_STEPS = 20;
 
     const request = indexedDB.open("ColoringAppDB", 1);
     request.onupgradeneeded = (e) => {
@@ -311,12 +316,14 @@
 
       document.getElementById('editor-zoom').value = 100;
       setCanvasZoom(100);
+      undoHistory = []; // Сброс истории отмены при открытии
 
       const img = new Image();
       img.onload = () => {
         canvas.width = img.width;
         canvas.height = img.height;
         ctx.drawImage(img, 0, 0);
+        saveStateToHistory(); // Сохраняем исходное состояние
       };
       img.src = page.progress || page.original;
 
@@ -327,6 +334,22 @@
       canvas.ontouchstart = (e) => { e.preventDefault(); startStroke(e.touches[0]); };
       canvas.ontouchmove = (e) => { e.preventDefault(); moveStroke(e.touches[0]); };
       canvas.ontouchend = endStroke;
+    }
+
+    function saveStateToHistory() {
+      const canvas = document.getElementById('paint-canvas');
+      if (undoHistory.length >= MAX_UNDO_STEPS) {
+        undoHistory.shift();
+      }
+      undoHistory.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+    }
+
+    function undoStroke() {
+      if (undoHistory.length > 1) {
+        undoHistory.pop(); // Удаляем текущий шаг
+        const previousState = undoHistory[undoHistory.length - 1];
+        ctx.putImageData(previousState, 0, 0);
+      }
     }
 
     function setCanvasZoom(val) {
@@ -364,7 +387,6 @@
       if (!isDrawing) return;
       const type = document.getElementById('brush-type').value;
 
-      // Эффект заужения кончика при отрыве для плавной кисти
       if (type === 'tapered' || type === 'japanese') {
         let fadeSteps = 5;
         let fadeWidth = currentLineWidth;
@@ -376,6 +398,7 @@
             clearInterval(fadeInterval);
             isDrawing = false;
             if (ctx) ctx.beginPath();
+            saveStateToHistory(); // Сохраняем в историю после отрыва
             return;
           }
 
@@ -390,12 +413,13 @@
           ctx.lineTo(lastX, lastY);
           ctx.stroke();
 
-          fadeWidth *= 0.6; // Быстро уменьшаем толщину
+          fadeWidth *= 0.6;
           fadeSteps--;
         }, 10);
       } else {
         isDrawing = false;
         if (ctx) ctx.beginPath();
+        saveStateToHistory(); // Сохраняем в историю после отрыва
       }
     }
 
@@ -413,14 +437,13 @@
       ctx.fillStyle = color;
 
       if (type === 'tapered') {
-        // Плавная кисть с динамической толщиной
         const now = Date.now();
         const dist = Math.hypot(x - lastX, y - lastY);
         const time = Math.max(1, now - lastTime);
         const speed = dist / time;
 
         const targetWidth = Math.max(1, baseSize - speed * 1.5);
-        currentLineWidth = currentLineWidth * 0.7 + targetWidth * 0.3; // Плавное сглаживание
+        currentLineWidth = currentLineWidth * 0.7 + targetWidth * 0.3;
 
         ctx.lineWidth = currentLineWidth;
         ctx.lineCap = 'round';

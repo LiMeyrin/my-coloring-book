@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Мои Раскраски</title>
+  <!-- Подключаем PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <style>
     :root {
@@ -100,6 +101,7 @@
 </head>
 <body>
 
+  <!-- 1. ГЛАВНАЯ СТРАНИЦА -->
   <div id="main-view">
     <header>
       <h1>🎨 Мои Раскраски</h1>
@@ -109,6 +111,7 @@
     <div id="pdf-grid" class="grid"></div>
   </div>
 
+  <!-- 2. СТРАНИЦА КНИГИ -->
   <div id="book-view" class="hidden">
     <header>
       <button class="btn btn-secondary" onclick="showView('main-view')">← К списку</button>
@@ -125,11 +128,13 @@
     <div id="pages-grid" class="grid"></div>
   </div>
 
+  <!-- МОДАЛЬНОЕ ОКНО -->
   <div id="page-modal" class="modal hidden">
     <img id="modal-img" src="" alt="Страница">
     <div class="modal-actions" id="modal-actions"></div>
   </div>
 
+  <!-- 3. РЕДАКТОР РИСОВАНИЯ -->
   <div id="editor-view" class="hidden">
     <div class="toolbar">
       <h3>Инструменты</h3>
@@ -181,7 +186,6 @@
     let currentZoom = 1;
     let currentLineWidth = 10;
     
-    // Массив истории для отмены
     let undoHistory = [];
     const MAX_UNDO_STEPS = 20;
 
@@ -216,17 +220,29 @@
         const context = canvas.getContext('2d');
         canvas.height = viewport.height;
         canvas.width = viewport.width;
+        
+        // Гарантируем завершение рендеринга каждой страницы
         await page.render({ canvasContext: context, viewport: viewport }).promise;
-        pages.push({ original: canvas.toDataURL(), progress: null });
+        pages.push({ original: canvas.toDataURL('image/png'), progress: null });
       }
+
+      if (pages.length === 0) return;
 
       const book = { title, cover: pages[0].original, pages };
       const tx = db.transaction("books", "readwrite");
-      tx.objectStore("books").add(book);
-      tx.oncomplete = () => loadBooks();
+      const store = tx.objectStore("books");
+      
+      const addRequest = store.add(book);
+      addRequest.onsuccess = () => {
+        loadBooks(); // Перерисовываем список сразу после сохранения
+      };
+      
+      // Сбрасываем значение инпута, чтобы можно было загружать тот же файл повторно
+      event.target.value = '';
     }
 
     function loadBooks() {
+      if (!db) return;
       const tx = db.transaction("books", "readonly");
       const store = tx.objectStore("books");
       const req = store.getAll();
@@ -316,14 +332,14 @@
 
       document.getElementById('editor-zoom').value = 100;
       setCanvasZoom(100);
-      undoHistory = []; // Сброс истории отмены при открытии
+      undoHistory = []; 
 
       const img = new Image();
       img.onload = () => {
         canvas.width = img.width;
         canvas.height = img.height;
         ctx.drawImage(img, 0, 0);
-        saveStateToHistory(); // Сохраняем исходное состояние
+        saveStateToHistory(); 
       };
       img.src = page.progress || page.original;
 
@@ -346,7 +362,7 @@
 
     function undoStroke() {
       if (undoHistory.length > 1) {
-        undoHistory.pop(); // Удаляем текущий шаг
+        undoHistory.pop(); 
         const previousState = undoHistory[undoHistory.length - 1];
         ctx.putImageData(previousState, 0, 0);
       }
@@ -398,7 +414,7 @@
             clearInterval(fadeInterval);
             isDrawing = false;
             if (ctx) ctx.beginPath();
-            saveStateToHistory(); // Сохраняем в историю после отрыва
+            saveStateToHistory(); 
             return;
           }
 
@@ -419,7 +435,7 @@
       } else {
         isDrawing = false;
         if (ctx) ctx.beginPath();
-        saveStateToHistory(); // Сохраняем в историю после отрыва
+        saveStateToHistory(); 
       }
     }
 

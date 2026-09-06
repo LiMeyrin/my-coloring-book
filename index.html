@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Мои Раскраски</title>
-  <!-- Подключаем PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <style>
     :root {
@@ -66,7 +65,7 @@
     }
     
     .toolbar {
-      width: 220px; background: white; padding: 12px; border-radius: 12px;
+      width: 230px; background: white; padding: 12px; border-radius: 12px;
       display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);
       overflow-y: auto; flex-shrink: 0;
     }
@@ -89,20 +88,18 @@
       background: white; 
       border-radius: 8px; 
       box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
-      touch-action: none; /* Запрещает прокрутку пальцем при рисовании */
+      touch-action: none; 
       transform-origin: top left;
     }
 
-    /* Адаптация для мобильных (панель сверху) */
     @media (max-width: 768px) {
       #editor-view { flex-direction: column; }
-      .toolbar { width: 100%; max-height: 200px; }
+      .toolbar { width: 100%; max-height: 220px; }
     }
   </style>
 </head>
 <body>
 
-  <!-- 1. ГЛАВНАЯ СТРАНИЦА -->
   <div id="main-view">
     <header>
       <h1>🎨 Мои Раскраски</h1>
@@ -112,7 +109,6 @@
     <div id="pdf-grid" class="grid"></div>
   </div>
 
-  <!-- 2. СТРАНИЦА КНИГИ -->
   <div id="book-view" class="hidden">
     <header>
       <button class="btn btn-secondary" onclick="showView('main-view')">← К списку</button>
@@ -129,19 +125,18 @@
     <div id="pages-grid" class="grid"></div>
   </div>
 
-  <!-- МОДАЛЬНОЕ ОКНО -->
   <div id="page-modal" class="modal hidden">
     <img id="modal-img" src="" alt="Страница">
     <div class="modal-actions" id="modal-actions"></div>
   </div>
 
-  <!-- 3. РЕДАКТОР РИСОВАНИЯ -->
   <div id="editor-view" class="hidden">
     <div class="toolbar">
       <h3>Инструменты</h3>
       
       <label>Тип кисти:</label>
       <select id="brush-type">
+        <option value="tapered">✨ Плавная (Острый кончик)</option>
         <option value="round">⚪ Круглая кисть</option>
         <option value="pencil">✏️ Карандаш</option>
         <option value="chisel">✒️ Косая кисть / Маркер</option>
@@ -183,6 +178,7 @@
     let lastX = 0, lastY = 0;
     let lastTime = 0;
     let currentZoom = 1;
+    let currentLineWidth = 10;
 
     const request = indexedDB.open("ColoringAppDB", 1);
     request.onupgradeneeded = (e) => {
@@ -307,14 +303,12 @@
       modal.classList.remove('hidden');
     }
 
-    // РЕДАКТОР И РИСОВАНИЕ (Мышь + Сенсор)
     function startDrawing() {
       showView('editor-view');
       const canvas = document.getElementById('paint-canvas');
       ctx = canvas.getContext('2d');
       const page = currentBook.pages[currentPageIndex];
 
-      // Сброс масштаба при открытии
       document.getElementById('editor-zoom').value = 100;
       setCanvasZoom(100);
 
@@ -326,12 +320,10 @@
       };
       img.src = page.progress || page.original;
 
-      // События мыши
       canvas.onmousedown = startStroke;
       canvas.onmousemove = moveStroke;
       canvas.onmouseup = endStroke;
 
-      // Сенсорные события (Тачскрин для телефонов/планшетов)
       canvas.ontouchstart = (e) => { e.preventDefault(); startStroke(e.touches[0]); };
       canvas.ontouchmove = (e) => { e.preventDefault(); moveStroke(e.touches[0]); };
       canvas.ontouchend = endStroke;
@@ -359,6 +351,7 @@
       lastX = coords.x;
       lastY = coords.y;
       lastTime = Date.now();
+      currentLineWidth = parseInt(document.getElementById('brush-size').value);
       draw(e);
     }
 
@@ -368,8 +361,42 @@
     }
 
     function endStroke() {
-      isDrawing = false;
-      if (ctx) ctx.beginPath();
+      if (!isDrawing) return;
+      const type = document.getElementById('brush-type').value;
+
+      // Эффект заужения кончика при отрыве для плавной кисти
+      if (type === 'tapered' || type === 'japanese') {
+        let fadeSteps = 5;
+        let fadeWidth = currentLineWidth;
+        let stepX = (lastX - (lastX - 2)) / fadeSteps;
+        let stepY = (lastY - (lastY - 2)) / fadeSteps;
+
+        const fadeInterval = setInterval(() => {
+          if (fadeSteps <= 0 || fadeWidth <= 0.5) {
+            clearInterval(fadeInterval);
+            isDrawing = false;
+            if (ctx) ctx.beginPath();
+            return;
+          }
+
+          ctx.beginPath();
+          ctx.strokeStyle = document.getElementById('color-picker').value;
+          ctx.lineWidth = fadeWidth;
+          ctx.lineCap = 'round';
+          ctx.moveTo(lastX, lastY);
+          
+          lastX += stepX;
+          lastY += stepY;
+          ctx.lineTo(lastX, lastY);
+          ctx.stroke();
+
+          fadeWidth *= 0.6; // Быстро уменьшаем толщину
+          fadeSteps--;
+        }, 10);
+      } else {
+        isDrawing = false;
+        if (ctx) ctx.beginPath();
+      }
     }
 
     function draw(e) {
@@ -385,7 +412,27 @@
       ctx.strokeStyle = color;
       ctx.fillStyle = color;
 
-      if (type === 'round') {
+      if (type === 'tapered') {
+        // Плавная кисть с динамической толщиной
+        const now = Date.now();
+        const dist = Math.hypot(x - lastX, y - lastY);
+        const time = Math.max(1, now - lastTime);
+        const speed = dist / time;
+
+        const targetWidth = Math.max(1, baseSize - speed * 1.5);
+        currentLineWidth = currentLineWidth * 0.7 + targetWidth * 0.3; // Плавное сглаживание
+
+        ctx.lineWidth = currentLineWidth;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        lastTime = now;
+
+      } else if (type === 'round') {
         ctx.lineWidth = baseSize;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
@@ -421,8 +468,8 @@
         const time = Math.max(1, now - lastTime);
         const speed = dist / time;
         
-        const dynamicSize = Math.max(2, baseSize - speed * 3);
-        ctx.lineWidth = dynamicSize;
+        currentLineWidth = Math.max(2, baseSize - speed * 3);
+        ctx.lineWidth = currentLineWidth;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
         ctx.shadowBlur = 0;

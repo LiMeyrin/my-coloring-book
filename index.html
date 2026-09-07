@@ -15,6 +15,9 @@
     * { 
       touch-action: none;
       box-sizing: border-box; 
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
     }
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -71,7 +74,7 @@
       touch-action: pan-y;
     }
     .toolbar label { font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; }
-    .toolbar select, .toolbar input[type="range"] { width: 100%; margin-top: 4px; }
+    .toolbar select, .toolbar input[type="range"] { width: 100%; margin-top: 4px; padding: 6px; }
     
     .canvas-wrapper { 
       flex: 1; 
@@ -83,10 +86,6 @@
       border-radius: 12px; 
       position: relative;
       touch-action: none;
-      cursor: grab;
-    }
-    .canvas-wrapper:active {
-      cursor: grabbing;
     }
     
     #canvas-container {
@@ -105,7 +104,7 @@
 
     @media (max-width: 768px) {
       #editor-view { flex-direction: column; }
-      .toolbar { width: 100%; max-height: 240px; }
+      .toolbar { width: 100%; max-height: 220px; }
     }
   </style>
 </head>
@@ -147,7 +146,7 @@
       
       <label>Инструмент:</label>
       <select id="brush-type">
-        <option value="none">— Не выбрано —</option>
+        <option value="none" selected>— Не выбрано —</option>
         <option value="fill">🪣 Заливка</option>
         <option value="tapered">✨ Плавная (Острый кончик)</option>
         <option value="round">⚪ Круглая кисть</option>
@@ -164,7 +163,7 @@
       <label>Размер: <span id="brush-size-val">10</span>px</label>
       <input type="range" id="brush-size" min="1" max="60" value="10" oninput="document.getElementById('brush-size-val').innerText = this.value">
 
-      <label>🔍 Приближение: <span id="zoom-val">100</span>%</label>
+      <label>🔍 Масштаб: <span id="zoom-val">100</span>%</label>
       <input type="range" id="editor-zoom" min="50" max="300" value="100" oninput="setCanvasZoom(this.value / 100)">
 
       <button class="btn btn-secondary" onclick="activateEyedropper()">🔍 Пипетка</button>
@@ -195,14 +194,14 @@
     let lastTime = 0;
     let currentLineWidth = 10;
     
-    // Трансформации (панорамирование и масштаб)
+    // Панорамирование и зум
     let zoomScale = 1;
     let panX = 0, panY = 0;
     let isPanning = false;
     let startPanX = 0, startPanY = 0;
 
-    // Управление касаниями пальцами
-    let touchPointers = new Map();
+    // Касания для мультитача
+    let activePointers = new Map();
     let initialPinchDist = null;
     let initialZoomOnPinch = 1;
 
@@ -363,7 +362,6 @@
       ctx = canvas.getContext('2d');
       const page = currentBook.pages[currentPageIndex];
 
-      // По умолчанию выбран прочерк "Не выбрано"
       document.getElementById('brush-type').value = 'none';
 
       zoomScale = 1;
@@ -400,22 +398,30 @@
       updateTransform();
     }
 
-    // Проверка: касание выполнено ИМЕННО СТИЛУСОМ
-    function isPen(e) {
-      return e.pointerType === 'pen';
-    }
-
     function handlePointerDown(e) {
-      if (e.pointerType === 'touch') {
-        touchPointers.set(e.pointerId, e);
-      }
+      activePointers.set(e.pointerId, e);
 
       const brushType = document.getElementById('brush-type').value;
 
-      // 1. РИСОВАНИЕ ТОЛЬКО ЕСЛИ СТИЛУС И ВЫБРАН ИНСТРУМЕНТ
-      if (isPen(e) && brushType !== 'none') {
-        const coords = getCoords(e);
+      // Если 2 и более пальца — переходим в режим панорамирования/зума
+      if (activePointers.size >= 2) {
+        isDrawing = false;
+        isPanning = false;
+        const pts = Array.from(activePointers.values());
+        initialPinchDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
+        initialZoomOnPinch = zoomScale;
+        return;
+      }
 
+      // ОДИН ПАЛЕЦ / СТИЛУС / МЫШЬ
+      if (brushType === 'none') {
+        // Режим перемещения
+        isPanning = true;
+        startPanX = e.clientX - panX;
+        startPanY = e.clientY - panY;
+      } else {
+        // Режим рисования
+        const coords = getCoords(e);
         if (brushType === 'fill') {
           const color = document.getElementById('color-picker').value;
           floodFill(coords.x, coords.y, color);
@@ -428,38 +434,17 @@
         lastTime = Date.now();
         currentLineWidth = parseInt(document.getElementById('brush-size').value);
         draw(e);
-        return;
-      }
-
-      // 2. ДВИЖЕНИЯ ПАЛЬЦЕВ (ПЕРАМЕЩЕНИЕ И ЗУМ)
-      if (e.pointerType === 'touch' || e.pointerType === 'mouse') {
-        if (touchPointers.size === 1) {
-          isPanning = true;
-          startPanX = e.clientX - panX;
-          startPanY = e.clientY - panY;
-        } else if (touchPointers.size === 2) {
-          isPanning = false;
-          const pts = Array.from(touchPointers.values());
-          initialPinchDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
-          initialZoomOnPinch = zoomScale;
-        }
       }
     }
 
     function handlePointerMove(e) {
-      if (e.pointerType === 'touch' && touchPointers.has(e.pointerId)) {
-        touchPointers.set(e.pointerId, e);
+      if (activePointers.has(e.pointerId)) {
+        activePointers.set(e.pointerId, e);
       }
 
-      // 1. РИСОВАНИЕ СТИЛУСОМ
-      if (isDrawing && isPen(e)) {
-        draw(e);
-        return;
-      }
-
-      // 2. МАСШТАБИРОВАНИЕ ДВУМЯ ПАЛЬЦАМИ
-      if (touchPointers.size === 2 && initialPinchDist) {
-        const pts = Array.from(touchPointers.values());
+      // Зум двумя пальцами (Pinch-to-Zoom)
+      if (activePointers.size >= 2 && initialPinchDist) {
+        const pts = Array.from(activePointers.values());
         const currentDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
         const scaleChange = currentDist / initialPinchDist;
         
@@ -468,8 +453,14 @@
         return;
       }
 
-      // 3. СДВИГ ХОЛСТА ОДНИМ ПАЛЬЦЕМ ИЛИ МЫШЬЮ
-      if (isPanning && (touchPointers.size === 1 || e.pointerType === 'mouse')) {
+      // Рисование
+      if (isDrawing && activePointers.size === 1) {
+        draw(e);
+        return;
+      }
+
+      // Перемещение
+      if (isPanning && activePointers.size === 1) {
         panX = e.clientX - startPanX;
         panY = e.clientY - startPanY;
         updateTransform();
@@ -477,14 +468,12 @@
     }
 
     function handlePointerUp(e) {
-      if (e.pointerType === 'touch') {
-        touchPointers.delete(e.pointerId);
-      }
+      activePointers.delete(e.pointerId);
 
-      if (touchPointers.size < 2) {
+      if (activePointers.size < 2) {
         initialPinchDist = null;
       }
-      if (touchPointers.size === 0) {
+      if (activePointers.size === 0) {
         isPanning = false;
       }
 
@@ -770,7 +759,7 @@
           document.getElementById('color-picker').value = result.sRGBHex;
         } catch (e) { console.log("Отмена"); }
       } else {
-        alert("Пипетка поддерживает мобильные браузеры Chrome/Edge.");
+        alert("Пипетка поддерживается в Chrome / Safari.");
       }
     }
 

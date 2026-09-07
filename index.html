@@ -2,908 +2,150 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Мои Раскраски</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Масштабирование изображения до 500%</title>
   <style>
-    :root {
-      --bg-color: #f7f9fc;
-      --card-bg: #ffffff;
-      --primary: #6c5ce7;
-      --primary-hover: #5a4bcf;
-    }
-    * { 
-      touch-action: none;
-      box-sizing: border-box; 
-      -webkit-touch-callout: none;
-      -webkit-user-select: none;
-      user-select: none;
-    }
     body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      margin: 0; padding: 15px;
-      background-color: var(--bg-color);
-      color: #333;
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      background-color: #f0f2f5;
     }
-    .hidden { display: none !important; }
-    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
-    
-    .btn {
-      background: var(--primary); color: white; border: none;
-      padding: 10px 16px; border-radius: 8px; cursor: pointer;
-      font-weight: 600; transition: background 0.2s; font-size: 14px;
-    }
-    .btn:hover { background: var(--primary-hover); }
-    .btn:disabled { background: #b2bec3; cursor: not-allowed; }
-    .btn-secondary { background: #b2bec3; }
-    .btn-danger { background: #ff7675; }
 
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-      gap: 15px;
-    }
-    .card {
-      background: var(--card-bg); border-radius: 12px; padding: 10px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.05); text-align: center;
-      cursor: pointer; transition: transform 0.2s;
-    }
-    .card:hover { transform: translateY(-3px); }
-    .card img { width: 100%; height: 160px; object-fit: cover; border-radius: 8px; }
-
-    .modal {
-      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.8); display: flex;
-      flex-direction: column; justify-content: center; align-items: center; z-index: 100;
-      padding: 15px;
-    }
-    .modal img { max-width: 90vw; max-height: 65vh; border-radius: 8px; background: white; object-fit: contain; }
-    .modal-actions { margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
-
-    #editor-view { 
-      display: flex; 
-      flex-direction: row; 
-      gap: 15px; 
-      height: calc(100vh - 30px); 
-    }
-    
-    .toolbar {
-      width: 230px; background: white; padding: 12px; border-radius: 12px;
-      display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-      overflow-y: auto; flex-shrink: 0;
-      touch-action: pan-y;
-    }
-    .toolbar label { font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; }
-    .toolbar select, .toolbar input[type="range"] { width: 100%; margin-top: 4px; padding: 6px; }
-    
-    /* Кнопка выбора цвета */
-    .color-preview-btn {
+    /* Контейнер для картинки с ограничением просмотра */
+    .image-container {
+      width: 600px;
+      height: 400px;
+      border: 2px solid #ccc;
+      border-radius: 8px;
+      overflow: hidden; /* Скрывает выходящие за пределы части */
       display: flex;
       align-items: center;
-      gap: 10px;
-      background: #f1f3f6;
-      border: 2px solid #ddd;
-      border-radius: 8px;
-      padding: 6px 10px;
-      cursor: pointer;
-      font-weight: 600;
-      font-size: 13px;
-    }
-    .color-box {
-      width: 26px; height: 26px; border-radius: 50%;
-      border: 2px solid #fff; box-shadow: 0 0 4px rgba(0,0,0,0.3);
-    }
-
-    /* Модальное окно Палитры */
-    .palette-card {
-      background: white; border-radius: 16px; padding: 20px;
-      width: 320px; max-width: 90vw; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-      display: flex; flex-direction: column; gap: 15px; align-items: center;
-    }
-    .preset-colors {
-      display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; width: 100%;
-    }
-    .color-swatch {
-      width: 100%; aspect-ratio: 1; border-radius: 50%; cursor: pointer;
-      border: 2px solid transparent; transition: transform 0.1s;
-    }
-    .color-swatch:hover { transform: scale(1.15); }
-
-    .canvas-wrapper { 
-      flex: 1; 
-      display: flex; 
-      justify-content: center; 
-      align-items: center; 
-      overflow: hidden; 
-      background: #eef2f5; 
-      border-radius: 12px; 
+      justify-content: center;
+      background-color: #fff;
+      cursor: grab;
       position: relative;
-      touch-action: none;
     }
-    
-    #canvas-container {
+
+    .image-container:active {
+      cursor: grabbing;
+    }
+
+    /* Настройки самого изображения */
+    #zoomable-image {
+      max-width: 100%;
+      max-height: 100%;
+      transition: transform 0.1s ease-out; /* Плавность масштабирования */
       transform-origin: center center;
-      position: absolute;
-      will-change: transform;
+      user-select: none;
     }
 
-    canvas { 
-      background: white; 
-      border-radius: 8px; 
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
-      touch-action: none;
-      display: block;
-    }
-    
-    canvas.eyedropper-active {
-      cursor: crosshair !important;
+    /* Панель управления */
+    .controls {
+      margin-top: 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #fff;
+      padding: 10px 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
 
-    /* Уведомление о режиме пипетки */
-    #eyedropper-banner {
-      position: absolute;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(108, 92, 231, 0.9);
-      color: white;
+    button {
       padding: 8px 16px;
-      border-radius: 20px;
-      font-size: 13px;
-      font-weight: 600;
-      pointer-events: none;
-      z-index: 10;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+      font-size: 16px;
+      cursor: pointer;
+      border: 1px solid #007bff;
+      background-color: #007bff;
+      color: white;
+      border-radius: 4px;
+      transition: background-color 0.2s;
     }
 
-    @media (max-width: 768px) {
-      #editor-view { flex-direction: column; }
-      .toolbar { width: 100%; max-height: 220px; }
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    input[type="range"] {
+      width: 150px;
+      cursor: pointer;
+    }
+
+    .scale-value {
+      font-weight: bold;
+      min-width: 50px;
     }
   </style>
 </head>
 <body>
 
-  <div id="main-view">
-    <header>
-      <h1>🎨 Мои Раскраски</h1>
-      <button class="btn" id="upload-btn" onclick="document.getElementById('pdf-upload').click()">+ Загрузить PDF</button>
-      <input type="file" id="pdf-upload" accept="application/pdf" class="hidden" onchange="uploadPDF(event)">
-    </header>
-    <div id="pdf-grid" class="grid"></div>
+  <!-- Контейнер с картинкой -->
+  <div class="image-container" id="container">
+    <img id="zoomable-image" src="https://picsum.photos/800/600" alt="Масштабируемое изображение">
   </div>
 
-  <div id="book-view" class="hidden">
-    <header>
-      <button class="btn btn-secondary" onclick="showView('main-view')">← К списку</button>
-      <h2 id="book-title">Название книги</h2>
-      <div>
-        Масштаб: 
-        <select id="scale-select" onchange="changeScale(this.value)">
-          <option value="1">100%</option>
-          <option value="1.3">130%</option>
-          <option value="1.6">160%</option>
-        </select>
-      </div>
-    </header>
-    <div id="pages-grid" class="grid"></div>
-  </div>
-
-  <div id="page-modal" class="modal hidden">
-    <img id="modal-img" src="" alt="Страница">
-    <div class="modal-actions" id="modal-actions"></div>
-  </div>
-
-  <!-- Окно выбора цвета (Палитра) -->
-  <div id="color-modal" class="modal hidden">
-    <div class="palette-card">
-      <h3>Выбор цвета</h3>
-      <button class="btn" style="width: 100%;" onclick="activateCanvasEyedropper()">🔍 Пипетка (кликни на рисунок)</button>
-      
-      <label style="align-self: flex-start; font-size: 13px; font-weight: 600;">Выбрать свой цвет:</label>
-      <input type="color" id="native-color-picker" style="width: 100%; height: 45px; border-radius: 8px; border: none; cursor: pointer;" onchange="setColor(this.value)">
-
-      <label style="align-self: flex-start; font-size: 13px; font-weight: 600;">Готовая палитра:</label>
-      <div class="preset-colors">
-        <div class="color-swatch" style="background: #000000" onclick="setColor('#000000')"></div>
-        <div class="color-swatch" style="background: #ffffff; border-color: #ccc" onclick="setColor('#ffffff')"></div>
-        <div class="color-swatch" style="background: #ff7675" onclick="setColor('#ff7675')"></div>
-        <div class="color-swatch" style="background: #d63031" onclick="setColor('#d63031')"></div>
-        <div class="color-swatch" style="background: #e17055" onclick="setColor('#e17055')"></div>
-        <div class="color-swatch" style="background: #fdcb6e" onclick="setColor('#fdcb6e')"></div>
-        <div class="color-swatch" style="background: #ffeaa7" onclick="setColor('#ffeaa7')"></div>
-        <div class="color-swatch" style="background: #55efc4" onclick="setColor('#55efc4')"></div>
-        <div class="color-swatch" style="background: #00b894" onclick="setColor('#00b894')"></div>
-        <div class="color-swatch" style="background: #74b9ff" onclick="setColor('#74b9ff')"></div>
-        <div class="color-swatch" style="background: #0984e3" onclick="setColor('#0984e3')"></div>
-        <div class="color-swatch" style="background: #6c5ce7" onclick="setColor('#6c5ce7')"></div>
-        <div class="color-swatch" style="background: #a29bfe" onclick="setColor('#a29bfe')"></div>
-        <div class="color-swatch" style="background: #fd79a8" onclick="setColor('#fd79a8')"></div>
-        <div class="color-swatch" style="background: #e84393" onclick="setColor('#e84393')"></div>
-        <div class="color-swatch" style="background: #81ecec" onclick="setColor('#81ecec')"></div>
-        <div class="color-swatch" style="background: #b2bec3" onclick="setColor('#b2bec3')"></div>
-        <div class="color-swatch" style="background: #636e72" onclick="setColor('#636e72')"></div>
-      </div>
-
-      <button class="btn btn-secondary" style="width: 100%;" onclick="closeColorModal()">Закрыть</button>
-    </div>
-  </div>
-
-  <div id="editor-view" class="hidden">
-    <div class="toolbar">
-      <h3>Инструменты</h3>
-      
-      <label>Инструмент:</label>
-      <select id="brush-type">
-        <option value="none" selected>— Не выбрано —</option>
-        <option value="fill">🪣 Заливка</option>
-        <option value="tapered">✨ Плавная (Острый кончик)</option>
-        <option value="round">⚪ Круглая кисть</option>
-        <option value="pencil">✏️ Карандаш</option>
-        <option value="chisel">✒️ Косая кисть / Маркер</option>
-        <option value="japanese">🖌️ Японская тушь</option>
-        <option value="soft">☁️ Акварель / Мягкая</option>
-        <option value="spray">💨 Аэрограф / Спрей</option>
-      </select>
-
-      <label>Цвет:</label>
-      <div class="color-preview-btn" onclick="openColorModal()">
-        <div class="color-box" id="active-color-box" style="background-color: #ff0000;"></div>
-        <span id="active-color-text">#ff0000</span>
-      </div>
-
-      <label>Размер: <span id="brush-size-val">10</span>px</label>
-      <input type="range" id="brush-size" min="1" max="60" value="10" oninput="document.getElementById('brush-size-val').innerText = this.value">
-
-      <label>🔍 Масштаб: <span id="zoom-val">100</span>%</label>
-      <input type="range" id="editor-zoom" min="50" max="300" value="100" oninput="setCanvasZoom(this.value / 100)">
-
-      <button class="btn btn-secondary" onclick="undoStroke()">⎌ Отменить</button>
-      
-      <hr style="width:100%; border: 0.5px solid #eee; margin: 5px 0;">
-      
-      <button class="btn" onclick="saveDrawing()">💾 Сохранить</button>
-      <button class="btn btn-secondary" onclick="closeEditor()">← Назад</button>
-    </div>
-    
-    <div class="canvas-wrapper" id="canvas-wrapper">
-      <div id="eyedropper-banner" class="hidden">🔍 Коснитесь картинки, чтобы взять цвет</div>
-      <div id="canvas-container">
-        <canvas id="paint-canvas"></canvas>
-      </div>
-    </div>
+  <!-- Элементы управления -->
+  <div class="controls">
+    <button id="zoom-out">-</button>
+    <input type="range" id="zoom-range" min="1" max="5" step="0.1" value="1">
+    <button id="zoom-in">+</button>
+    <button id="zoom-reset">Сброс</button>
+    <span class="scale-value" id="scale-display">100%</span>
   </div>
 
   <script>
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const img = document.getElementById('zoomable-image');
+    const container = document.getElementById('container');
+    const zoomRange = document.getElementById('zoom-range');
+    const zoomInBtn = document.getElementById('zoom-in');
+    const zoomOutBtn = document.getElementById('zoom-out');
+    const zoomResetBtn = document.getElementById('zoom-reset');
+    const scaleDisplay = document.getElementById('scale-display');
 
-    let db;
-    let currentBook = null;
-    let currentPageIndex = null;
-    let isDrawing = false;
-    let isEyedropperActive = false;
-    let ctx;
-    let lastX = 0, lastY = 0;
-    let lastTime = 0;
-    let currentLineWidth = 10;
-    let currentColor = '#ff0000';
-    
-    // Панорамирование и зум
-    let zoomScale = 1;
-    let panX = 0, panY = 0;
-    let isPanning = false;
-    let startPanX = 0, startPanY = 0;
+    // Границы масштаба (1 = 100%, 5 = 500%)
+    const MIN_SCALE = 1;
+    const MAX_SCALE = 5;
+    const STEP = 0.2;
 
-    // Касания для мультитача
-    let activePointers = new Map();
-    let initialPinchDist = null;
-    let initialZoomOnPinch = 1;
+    let currentScale = 1;
 
-    let undoHistory = [];
-    const MAX_UNDO_STEPS = 20;
-
-    const request = indexedDB.open("ColoringAppDB", 1);
-    request.onupgradeneeded = (e) => {
-      db = e.target.result;
-      if (!db.objectStoreNames.contains("books")) {
-        db.createObjectStore("books", { keyPath: "id", autoIncrement: true });
-      }
-    };
-    request.onsuccess = (e) => {
-      db = e.target.result;
-      loadBooks();
-    };
-
-    function showView(viewId) {
-      document.querySelectorAll('#main-view, #book-view, #editor-view').forEach(v => v.classList.add('hidden'));
-      document.getElementById(viewId).classList.remove('hidden');
-    }
-
-    function openColorModal() {
-      document.getElementById('color-modal').classList.remove('hidden');
-    }
-
-    function closeColorModal() {
-      document.getElementById('color-modal').classList.add('hidden');
-    }
-
-    function setColor(hex) {
-      currentColor = hex;
-      document.getElementById('active-color-box').style.backgroundColor = hex;
-      document.getElementById('active-color-text').innerText = hex;
-      document.getElementById('native-color-picker').value = hex;
-      closeColorModal();
-    }
-
-    function activateCanvasEyedropper() {
-      closeColorModal();
-      isEyedropperActive = true;
-      document.getElementById('eyedropper-banner').classList.remove('hidden');
-      document.getElementById('paint-canvas').classList.add('eyedropper-active');
-    }
-
-    function pickColorFromCanvas(x, y) {
-      const canvas = document.getElementById('paint-canvas');
-      if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) return;
+    // Функция обновления масштаба
+    function setScale(scale) {
+      // Ограничиваем значение в диапазоне от 1 до 5
+      currentScale = Math.min(Math.max(MIN_SCALE, scale), MAX_SCALE);
       
-      const pixel = ctx.getImageData(x, y, 1, 1).data;
-      const r = pixel[0].toString(16).padStart(2, '0');
-      const g = pixel[1].toString(16).padStart(2, '0');
-      const b = pixel[2].toString(16).padStart(2, '0');
+      // Применяем CSS-трансформацию
+      img.style.transform = `scale(${currentScale})`;
       
-      const pickedHex = `#${r}${g}${b}`;
-      setColor(pickedHex);
-
-      isEyedropperActive = false;
-      document.getElementById('eyedropper-banner').classList.add('hidden');
-      document.getElementById('paint-canvas').classList.remove('eyedropper-active');
+      // Обновляем значение ползунка и текстовый индикатор
+      zoomRange.value = currentScale;
+      scaleDisplay.textContent = `${Math.round(currentScale * 100)}%`;
     }
 
-    async function uploadPDF(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-
-      const btn = document.getElementById('upload-btn');
-      const originalBtnText = btn.innerText;
-      btn.innerText = 'Загрузка...';
-      btn.disabled = true;
-
-      try {
-        const title = prompt("Введите название раскраски:", file.name.replace(/\.pdf$/i, '')) || "Без названия";
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        
-        const pages = [];
-        for (let i = 1; i <= pdf.numPages; i++) {
-          btn.innerText = `Обработка: ${i}/${pdf.numPages}`;
-          const page = await pdf.getPage(i);
-          const viewport = page.getViewport({ scale: 1.2 });
-          const canvas = document.createElement('canvas');
-          const context = canvas.getContext('2d');
-          canvas.height = viewport.height;
-          canvas.width = viewport.width;
-          
-          await page.render({ canvasContext: context, viewport: viewport }).promise;
-          pages.push({ original: canvas.toDataURL('image/jpeg', 0.8), progress: null });
-        }
-
-        if (pages.length === 0) return;
-
-        const book = { title, cover: pages[0].original, pages };
-        const tx = db.transaction("books", "readwrite");
-        const store = tx.objectStore("books");
-        
-        const addRequest = store.add(book);
-        addRequest.onsuccess = () => loadBooks();
-
-      } catch (err) {
-        console.error("Ошибка обработки PDF:", err);
-        alert("Произошла ошибка при чтении файла PDF.");
-      } finally {
-        btn.innerText = originalBtnText;
-        btn.disabled = false;
-        event.target.value = '';
-      }
-    }
-
-    function loadBooks() {
-      if (!db) return;
-      const tx = db.transaction("books", "readonly");
-      const store = tx.objectStore("books");
-      const req = store.getAll();
-      req.onsuccess = () => {
-        const grid = document.getElementById('pdf-grid');
-        grid.innerHTML = '';
-        req.result.forEach(book => {
-          const card = document.createElement('div');
-          card.className = 'card';
-          card.innerHTML = `<img src="${book.cover}"><h3>${book.title}</h3>`;
-          card.onclick = () => openBook(book);
-          grid.appendChild(card);
-        });
-      };
-    }
-
-    function openBook(book) {
-      currentBook = book;
-      document.getElementById('book-title').innerText = book.title;
-      renderPagesGrid();
-      showView('book-view');
-    }
-
-    function renderPagesGrid() {
-      const grid = document.getElementById('pages-grid');
-      grid.innerHTML = '';
-      currentBook.pages.forEach((page, index) => {
-        const card = document.createElement('div');
-        card.className = 'card';
-        const imgSrc = page.progress || page.original;
-        card.innerHTML = `<img src="${imgSrc}"><p>Страница ${index + 1}</p>`;
-        card.onclick = () => openModal(index);
-        grid.appendChild(card);
-      });
-    }
-
-    function openModal(index) {
-      currentPageIndex = index;
-      const page = currentBook.pages[index];
-      const modal = document.getElementById('page-modal');
-      const img = document.getElementById('modal-img');
-      const actions = document.getElementById('modal-actions');
-      
-      img.src = page.progress || page.original;
-      actions.innerHTML = '';
-
-      const btnBack = document.createElement('button');
-      btnBack.className = 'btn btn-secondary';
-      btnBack.innerText = 'Назад';
-      btnBack.onclick = () => modal.classList.add('hidden');
-      actions.appendChild(btnBack);
-
-      if (!page.progress) {
-        const btnDraw = document.createElement('button');
-        btnDraw.className = 'btn';
-        btnDraw.innerText = 'Рисовать';
-        btnDraw.onclick = () => { modal.classList.add('hidden'); startDrawing(); };
-        actions.appendChild(btnDraw);
-      } else {
-        const btnContinue = document.createElement('button');
-        btnContinue.className = 'btn';
-        btnContinue.innerText = 'Продолжить';
-        btnContinue.onclick = () => { modal.classList.add('hidden'); startDrawing(); };
-        
-        const btnReset = document.createElement('button');
-        btnReset.className = 'btn btn-danger';
-        btnReset.innerText = 'Начать заново';
-        btnReset.onclick = () => {
-          page.progress = null;
-          saveBookToDB();
-          openModal(index);
-          renderPagesGrid();
-        };
-
-        actions.appendChild(btnContinue);
-        actions.appendChild(btnReset);
-      }
-
-      modal.classList.remove('hidden');
-    }
-
-    function startDrawing() {
-      showView('editor-view');
-      const canvas = document.getElementById('paint-canvas');
-      const wrapper = document.getElementById('canvas-wrapper');
-      ctx = canvas.getContext('2d', { willReadFrequently: true });
-      const page = currentBook.pages[currentPageIndex];
-
-      document.getElementById('brush-type').value = 'none';
-
-      zoomScale = 1;
-      panX = 0;
-      panY = 0;
-      updateTransform();
-
-      undoHistory = []; 
-
-      const img = new Image();
-      img.onload = () => {
-        canvas.width = img.width;
-        canvas.height = img.height;
-        ctx.drawImage(img, 0, 0);
-        saveStateToHistory(); 
-      };
-      img.src = page.progress || page.original;
-
-      wrapper.onpointerdown = handlePointerDown;
-      wrapper.onpointermove = handlePointerMove;
-      wrapper.onpointerup = handlePointerUp;
-      wrapper.onpointercancel = handlePointerUp;
-    }
-
-    function updateTransform() {
-      const container = document.getElementById('canvas-container');
-      container.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomScale})`;
-      document.getElementById('editor-zoom').value = Math.round(zoomScale * 100);
-      document.getElementById('zoom-val').innerText = Math.round(zoomScale * 100);
-    }
-
-    function setCanvasZoom(newScale) {
-      zoomScale = Math.max(0.5, Math.min(3, newScale));
-      updateTransform();
-    }
-
-    function handlePointerDown(e) {
-      activePointers.set(e.pointerId, e);
-
-      const coords = getCoords(e);
-
-      if (isEyedropperActive) {
-        pickColorFromCanvas(coords.x, coords.y);
-        return;
-      }
-
-      const brushType = document.getElementById('brush-type').value;
-
-      if (activePointers.size >= 2) {
-        isDrawing = false;
-        isPanning = false;
-        const pts = Array.from(activePointers.values());
-        initialPinchDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
-        initialZoomOnPinch = zoomScale;
-        return;
-      }
-
-      if (brushType === 'none') {
-        isPanning = true;
-        startPanX = e.clientX - panX;
-        startPanY = e.clientY - panY;
-      } else {
-        if (brushType === 'fill') {
-          floodFill(coords.x, coords.y, currentColor);
-          return;
-        }
-
-        isDrawing = true;
-        lastX = coords.x;
-        lastY = coords.y;
-        lastTime = Date.now();
-        currentLineWidth = parseInt(document.getElementById('brush-size').value);
-        draw(e);
-      }
-    }
-
-    function handlePointerMove(e) {
-      if (activePointers.has(e.pointerId)) {
-        activePointers.set(e.pointerId, e);
-      }
-
-      if (activePointers.size >= 2 && initialPinchDist) {
-        const pts = Array.from(activePointers.values());
-        const currentDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
-        const scaleChange = currentDist / initialPinchDist;
-        
-        zoomScale = Math.max(0.5, Math.min(3, initialZoomOnPinch * scaleChange));
-        updateTransform();
-        return;
-      }
-
-      if (isDrawing && activePointers.size === 1) {
-        draw(e);
-        return;
-      }
-
-      if (isPanning && activePointers.size === 1) {
-        panX = e.clientX - startPanX;
-        panY = e.clientY - startPanY;
-        updateTransform();
-      }
-    }
-
-    function handlePointerUp(e) {
-      activePointers.delete(e.pointerId);
-
-      if (activePointers.size < 2) {
-        initialPinchDist = null;
-      }
-      if (activePointers.size === 0) {
-        isPanning = false;
-      }
-
-      if (isDrawing) {
-        endStroke(e);
-      }
-    }
-
-    function getCoords(e) {
-      const canvas = document.getElementById('paint-canvas');
-      const rect = canvas.getBoundingClientRect();
-      return {
-        x: Math.floor((e.clientX - rect.left) / zoomScale),
-        y: Math.floor((e.clientY - rect.top) / zoomScale)
-      };
-    }
-
-    function saveStateToHistory() {
-      const canvas = document.getElementById('paint-canvas');
-      if (undoHistory.length >= MAX_UNDO_STEPS) {
-        undoHistory.shift();
-      }
-      undoHistory.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
-    }
-
-    function undoStroke() {
-      if (undoHistory.length > 1) {
-        undoHistory.pop(); 
-        const previousState = undoHistory[undoHistory.length - 1];
-        ctx.putImageData(previousState, 0, 0);
-      }
-    }
-
-    function hexToRgba(hex) {
-      const num = parseInt(hex.replace('#', ''), 16);
-      return [(num >> 16) & 255, (num >> 8) & 255, num & 255, 255];
-    }
-
-    function floodFill(startX, startY, fillColorHex) {
-      const canvas = document.getElementById('paint-canvas');
-      const width = canvas.width;
-      const height = canvas.height;
-      
-      if (startX < 0 || startX >= width || startY < 0 || startY >= height) return;
-
-      const imgData = ctx.getImageData(0, 0, width, height);
-      const data = imgData.data;
-      const fillRgb = hexToRgba(fillColorHex);
-
-      function isBorder(pos) {
-        const r = data[pos];
-        const g = data[pos + 1];
-        const b = data[pos + 2];
-        const a = data[pos + 3];
-        return ((r + g + b) / 3) < 120 || a < 50; 
-      }
-
-      const startPos = (startY * width + startX) * 4;
-      if (isBorder(startPos)) return;
-
-      const pixelStack = [[startX, startY]];
-
-      while (pixelStack.length > 0) {
-        const newPos = pixelStack.pop();
-        const x = newPos[0];
-        let y = newPos[1];
-        let pixelPos = (y * width + x) * 4;
-
-        while (y >= 0 && !isBorder(pixelPos)) {
-          y--;
-          pixelPos -= width * 4;
-        }
-
-        pixelPos += width * 4;
-        y++;
-
-        let reachLeft = false;
-        let reachRight = false;
-
-        while (y < height && !isBorder(pixelPos)) {
-          if (data[pixelPos] === fillRgb[0] && 
-              data[pixelPos + 1] === fillRgb[1] && 
-              data[pixelPos + 2] === fillRgb[2]) {
-            y++;
-            pixelPos += width * 4;
-            continue;
-          }
-
-          data[pixelPos] = fillRgb[0];
-          data[pixelPos + 1] = fillRgb[1];
-          data[pixelPos + 2] = fillRgb[2];
-          data[pixelPos + 3] = 255;
-
-          if (x > 0) {
-            if (!isBorder(pixelPos - 4)) {
-              if (!reachLeft) {
-                pixelStack.push([x - 1, y]);
-                reachLeft = true;
-              }
-            } else if (reachLeft) {
-              reachLeft = false;
-            }
-          }
-
-          if (x < width - 1) {
-            if (!isBorder(pixelPos + 4)) {
-              if (!reachRight) {
-                pixelStack.push([x + 1, y]);
-                reachRight = true;
-              }
-            } else if (reachRight) {
-              reachRight = false;
-            }
-          }
-
-          y++;
-          pixelPos += width * 4;
-        }
-      }
-
-      ctx.putImageData(imgData, 0, 0);
-      saveStateToHistory();
-    }
-
-    function endStroke(e) {
-      if (!isDrawing) return;
-      const type = document.getElementById('brush-type').value;
-
-      if (type === 'tapered' || type === 'japanese') {
-        let fadeSteps = 5;
-        let fadeWidth = currentLineWidth;
-        let stepX = (lastX - (lastX - 2)) / fadeSteps;
-        let stepY = (lastY - (lastY - 2)) / fadeSteps;
-
-        const fadeInterval = setInterval(() => {
-          if (fadeSteps <= 0 || fadeWidth <= 0.5) {
-            clearInterval(fadeInterval);
-            isDrawing = false;
-            if (ctx) ctx.beginPath();
-            saveStateToHistory(); 
-            return;
-          }
-
-          ctx.beginPath();
-          ctx.strokeStyle = currentColor;
-          ctx.lineWidth = fadeWidth;
-          ctx.lineCap = 'round';
-          ctx.moveTo(lastX, lastY);
-          
-          lastX += stepX;
-          lastY += stepY;
-          ctx.lineTo(lastX, lastY);
-          ctx.stroke();
-
-          fadeWidth *= 0.6;
-          fadeSteps--;
-        }, 10);
-      } else {
-        isDrawing = false;
-        if (ctx) ctx.beginPath();
-        saveStateToHistory(); 
-      }
-    }
-
-    function draw(e) {
-      if (!isDrawing) return;
-      const coords = getCoords(e);
-      const x = coords.x;
-      const y = coords.y;
-
-      let baseSize = parseInt(document.getElementById('brush-size').value);
-      
-      if (e.pressure && e.pressure > 0 && e.pressure !== 0.5) {
-        baseSize = baseSize * e.pressure * 1.5;
-      }
-
-      const type = document.getElementById('brush-type').value;
-
-      ctx.strokeStyle = currentColor;
-      ctx.fillStyle = currentColor;
-
-      if (type === 'tapered') {
-        const now = Date.now();
-        const dist = Math.hypot(x - lastX, y - lastY);
-        const time = Math.max(1, now - lastTime);
-        const speed = dist / time;
-
-        const targetWidth = Math.max(1, baseSize - speed * 1.5);
-        currentLineWidth = currentLineWidth * 0.7 + targetWidth * 0.3;
-
-        ctx.lineWidth = currentLineWidth;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.shadowBlur = 0;
-        ctx.beginPath();
-        ctx.moveTo(lastX, lastY);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-        lastTime = now;
-
-      } else if (type === 'round') {
-        ctx.lineWidth = baseSize;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.shadowBlur = 0;
-        ctx.beginPath();
-        ctx.moveTo(lastX, lastY);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-
-      } else if (type === 'pencil') {
-        ctx.lineWidth = Math.max(1, baseSize * 0.5);
-        ctx.lineCap = 'round';
-        ctx.globalAlpha = 0.4;
-        ctx.shadowBlur = 0;
-        ctx.beginPath();
-        ctx.moveTo(lastX, lastY);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-        ctx.globalAlpha = 1.0;
-
-      } else if (type === 'chisel') {
-        ctx.lineWidth = baseSize;
-        ctx.lineCap = 'square';
-        ctx.shadowBlur = 0;
-        ctx.beginPath();
-        ctx.moveTo(lastX, lastY);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-
-      } else if (type === 'japanese') {
-        const now = Date.now();
-        const dist = Math.hypot(x - lastX, y - lastY);
-        const time = Math.max(1, now - lastTime);
-        const speed = dist / time;
-        
-        currentLineWidth = Math.max(2, baseSize - speed * 3);
-        ctx.lineWidth = currentLineWidth;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.shadowBlur = 0;
-        ctx.beginPath();
-        ctx.moveTo(lastX, lastY);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-        lastTime = now;
-
-      } else if (type === 'soft') {
-        ctx.lineWidth = baseSize;
-        ctx.lineCap = 'round';
-        ctx.globalAlpha = 0.2;
-        ctx.shadowColor = currentColor;
-        ctx.shadowBlur = baseSize / 2;
-        ctx.beginPath();
-        ctx.moveTo(lastX, lastY);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-        ctx.globalAlpha = 1.0;
-        ctx.shadowBlur = 0;
-
-      } else if (type === 'spray') {
-        ctx.shadowBlur = 0;
-        const density = baseSize * 2;
-        for (let i = 0; i < density; i++) {
-          const offsetX = (Math.random() - 0.5) * baseSize * 2;
-          const offsetY = (Math.random() - 0.5) * baseSize * 2;
-          if (Math.hypot(offsetX, offsetY) <= baseSize) {
-            ctx.fillRect(x + offsetX, y + offsetY, 1, 1);
-          }
-        }
-      }
-
-      lastX = x;
-      lastY = y;
-    }
-
-    function saveDrawing() {
-      const canvas = document.getElementById('paint-canvas');
-      currentBook.pages[currentPageIndex].progress = canvas.toDataURL('image/jpeg', 0.8);
-      saveBookToDB();
-      alert("Сохранено!");
-    }
-
-    function saveBookToDB() {
-      const tx = db.transaction("books", "readwrite");
-      tx.objectStore("books").put(currentBook);
-    }
-
-    function closeEditor() {
-      showView('book-view');
-      renderPagesGrid();
-    }
-
-    function changeScale(scale) {
-      const grid = document.getElementById('pages-grid');
-      grid.style.transform = `scale(${scale})`;
-      grid.style.transformOrigin = 'top left';
-    }
+    // 1. Увеличение по колесику мыши
+    container.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? STEP : -STEP;
+      setScale(currentScale + delta);
+    });
+
+    // 2. Управление ползунком
+    zoomRange.addEventListener('input', (e) => {
+      setScale(parseFloat(e.target.value));
+    });
+
+    // 3. Кнопки "+" и "-"
+    zoomInBtn.addEventListener('click', () => setScale(currentScale + STEP));
+    zoomOutBtn.addEventListener('click', () => setScale(currentScale - STEP));
+
+    // 4. Кнопка сброса
+    zoomResetBtn.addEventListener('click', () => setScale(1));
   </script>
+
 </body>
 </html>

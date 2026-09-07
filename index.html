@@ -3,8 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Мои Раскраски</title>
+  <title>Мои Раскраски (Облако)</title>
+  
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
   <style>
     :root {
       --bg-color: #f7f9fc;
@@ -22,11 +28,15 @@
     .hidden { display: none !important; }
     header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
     
+    .user-profile { display: flex; align-items: center; gap: 10px; }
+    .user-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }
+
     /* Кнопки */
     .btn {
       background: var(--primary); color: white; border: none;
       padding: 10px 16px; border-radius: 8px; cursor: pointer;
       font-weight: 600; transition: background 0.2s; font-size: 14px;
+      display: inline-flex; align-items: center; gap: 6px;
     }
     .btn:hover { background: var(--primary-hover); }
     .btn:disabled { background: #b2bec3; cursor: not-allowed; }
@@ -47,7 +57,7 @@
     .card:hover { transform: translateY(-3px); }
     .card img { width: 100%; height: 160px; object-fit: cover; border-radius: 8px; }
 
-    /* Модалка страницы */
+    /* Модальное окно */
     .modal {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
       background: rgba(0,0,0,0.8); display: flex;
@@ -57,7 +67,7 @@
     .modal img { max-width: 90vw; max-height: 65vh; border-radius: 8px; background: white; object-fit: contain; }
     .modal-actions { margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 
-    /* Редактор адаптивный */
+    /* Редактор */
     #editor-view { 
       display: flex; 
       flex-direction: row; 
@@ -104,10 +114,18 @@
   <div id="main-view">
     <header>
       <h1>🎨 Мои Раскраски</h1>
-      <button class="btn" id="upload-btn" onclick="document.getElementById('pdf-upload').click()">+ Загрузить PDF</button>
-      <input type="file" id="pdf-upload" accept="application/pdf" class="hidden" onchange="uploadPDF(event)">
+      <div id="auth-container">
+        <button class="btn" onclick="loginGoogle()">🚀 Войти через Google</button>
+      </div>
     </header>
-    <div id="pdf-grid" class="grid"></div>
+    
+    <div id="app-content" class="hidden">
+      <div style="margin-bottom: 15px;">
+        <button class="btn" id="upload-btn" onclick="document.getElementById('pdf-upload').click()">+ Загрузить PDF в облако</button>
+        <input type="file" id="pdf-upload" accept="application/pdf" class="hidden" onchange="uploadPDF(event)">
+      </div>
+      <div id="pdf-grid" class="grid"></div>
+    </div>
   </div>
 
   <div id="book-view" class="hidden">
@@ -161,7 +179,7 @@
       
       <hr style="width:100%; border: 0.5px solid #eee; margin: 5px 0;">
       
-      <button class="btn" onclick="saveDrawing()">💾 Сохранить</button>
+      <button class="btn" id="save-btn" onclick="saveDrawing()">💾 Сохранить в облако</button>
       <button class="btn btn-secondary" onclick="closeEditor()">← Назад</button>
     </div>
     
@@ -171,9 +189,24 @@
   </div>
 
   <script>
+    // Ваши ключи из Firebase console:
+    const firebaseConfig = {
+      apiKey: "AIzaSyBsoICYjt_pp3kigiwjnmNzptKsUnfwbHo",
+      authDomain: "mycolorings-32cc4.firebaseapp.com",
+      projectId: "mycolorings-32cc4",
+      storageBucket: "mycolorings-32cc4.firebasestorage.app",
+      messagingSenderId: "77250876568",
+      appId: "1:77250876568:web:08a1c4d192d6524edcd2ed",
+      measurementId: "G-EFC42VMPWN"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-    let db;
+    let currentUser = null;
     let currentBook = null;
     let currentPageIndex = null;
     let isDrawing = false;
@@ -182,21 +215,44 @@
     let lastTime = 0;
     let currentZoom = 1;
     let currentLineWidth = 10;
-    
     let undoHistory = [];
     const MAX_UNDO_STEPS = 20;
 
-    const request = indexedDB.open("ColoringAppDB", 1);
-    request.onupgradeneeded = (e) => {
-      db = e.target.result;
-      if (!db.objectStoreNames.contains("books")) {
-        db.createObjectStore("books", { keyPath: "id", autoIncrement: true });
+    // Вход в Google
+    function loginGoogle() {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      auth.signInWithPopup(provider).catch(error => {
+        alert("Ошибка входа: " + error.message);
+      });
+    }
+
+    // Выход из аккаунта
+    function logout() {
+      auth.signOut();
+    }
+
+    // Отслеживание состояния входа
+    auth.onAuthStateChanged(user => {
+      currentUser = user;
+      const authContainer = document.getElementById('auth-container');
+      const appContent = document.getElementById('app-content');
+
+      if (user) {
+        authContainer.innerHTML = `
+          <div class="user-profile">
+            <img src="${user.photoURL}" class="user-avatar" alt="Avatar">
+            <span>${user.displayName}</span>
+            <button class="btn btn-secondary" onclick="logout()">Выйти</button>
+          </div>
+        `;
+        appContent.classList.remove('hidden');
+        loadBooksFromCloud();
+      } else {
+        authContainer.innerHTML = `<button class="btn" onclick="loginGoogle()">🚀 Войти через Google</button>`;
+        appContent.classList.add('hidden');
+        document.getElementById('pdf-grid').innerHTML = '';
       }
-    };
-    request.onsuccess = (e) => {
-      db = e.target.result;
-      loadBooks();
-    };
+    });
 
     function showView(viewId) {
       document.querySelectorAll('#main-view, #book-view, #editor-view').forEach(v => v.classList.add('hidden'));
@@ -204,6 +260,7 @@
     }
 
     async function uploadPDF(event) {
+      if (!currentUser) return alert("Пожалуйста, войдите в аккаунт.");
       const file = event.target.files[0];
       if (!file) return;
 
@@ -221,28 +278,33 @@
         for (let i = 1; i <= pdf.numPages; i++) {
           btn.innerText = `Обработка: ${i}/${pdf.numPages}`;
           const page = await pdf.getPage(i);
-          const viewport = page.getViewport({ scale: 1.2 });
+          const viewport = page.getViewport({ scale: 1.0 });
           const canvas = document.createElement('canvas');
           const context = canvas.getContext('2d');
           canvas.height = viewport.height;
           canvas.width = viewport.width;
           
           await page.render({ canvasContext: context, viewport: viewport }).promise;
-          pages.push({ original: canvas.toDataURL('image/jpeg', 0.8), progress: null });
+          pages.push({ original: canvas.toDataURL('image/jpeg', 0.7), progress: null });
         }
 
         if (pages.length === 0) return;
 
-        const book = { title, cover: pages[0].original, pages };
-        const tx = db.transaction("books", "readwrite");
-        const store = tx.objectStore("books");
+        btn.innerText = 'Сохранение в облако...';
         
-        const addRequest = store.add(book);
-        addRequest.onsuccess = () => loadBooks();
+        await db.collection("books").add({
+          userId: currentUser.uid,
+          title: title,
+          cover: pages[0].original,
+          pages: pages,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        loadBooksFromCloud();
 
       } catch (err) {
-        console.error("Ошибка обработки PDF:", err);
-        alert("Произошла ошибка при чтении файла PDF.");
+        console.error("Ошибка загрузки:", err);
+        alert("Ошибка при обработке или сохранении в облако.");
       } finally {
         btn.innerText = originalBtnText;
         btn.disabled = false;
@@ -250,22 +312,23 @@
       }
     }
 
-    function loadBooks() {
-      if (!db) return;
-      const tx = db.transaction("books", "readonly");
-      const store = tx.objectStore("books");
-      const req = store.getAll();
-      req.onsuccess = () => {
-        const grid = document.getElementById('pdf-grid');
-        grid.innerHTML = '';
-        req.result.forEach(book => {
-          const card = document.createElement('div');
-          card.className = 'card';
-          card.innerHTML = `<img src="${book.cover}"><h3>${book.title}</h3>`;
-          card.onclick = () => openBook(book);
-          grid.appendChild(card);
+    function loadBooksFromCloud() {
+      if (!currentUser) return;
+      db.collection("books")
+        .where("userId", "==", currentUser.uid)
+        .get()
+        .then(snapshot => {
+          const grid = document.getElementById('pdf-grid');
+          grid.innerHTML = '';
+          snapshot.forEach(doc => {
+            const book = { id: doc.id, ...doc.data() };
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = `<img src="${book.cover}"><h3>${book.title}</h3>`;
+            card.onclick = () => openBook(book);
+            grid.appendChild(card);
+          });
         });
-      };
     }
 
     function openBook(book) {
@@ -319,9 +382,9 @@
         const btnReset = document.createElement('button');
         btnReset.className = 'btn btn-danger';
         btnReset.innerText = 'Начать заново';
-        btnReset.onclick = () => {
+        btnReset.onclick = async () => {
           page.progress = null;
-          saveBookToDB();
+          await saveBookToCloud();
           openModal(index);
           renderPagesGrid();
         };
@@ -363,9 +426,7 @@
 
     function saveStateToHistory() {
       const canvas = document.getElementById('paint-canvas');
-      if (undoHistory.length >= MAX_UNDO_STEPS) {
-        undoHistory.shift();
-      }
+      if (undoHistory.length >= MAX_UNDO_STEPS) undoHistory.shift();
       undoHistory.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
     }
 
@@ -395,20 +456,13 @@
 
     function hexToRgba(hex) {
       const num = parseInt(hex.replace('#', ''), 16);
-      return [
-        (num >> 16) & 255,
-        (num >> 8) & 255,
-        num & 255,
-        255
-      ];
+      return [(num >> 16) & 255, (num >> 8) & 255, num & 255, 255];
     }
 
-    // Алгоритм Flood Fill (Заливка)
     function floodFill(startX, startY, fillColorHex) {
       const canvas = document.getElementById('paint-canvas');
       const width = canvas.width;
       const height = canvas.height;
-      
       if (startX < 0 || startX >= width || startY < 0 || startY >= height) return;
 
       const imgData = ctx.getImageData(0, 0, width, height);
@@ -422,23 +476,17 @@
 
       const fillRgb = hexToRgba(fillColorHex);
 
-      // Если цвет совпадает, не заливаем
       if (Math.abs(targetR - fillRgb[0]) < 10 &&
           Math.abs(targetG - fillRgb[1]) < 10 &&
           Math.abs(targetB - fillRgb[2]) < 10) return;
 
-      const tolerance = 60; // Допуск по цвету для красивого прилегания к контурам
+      const tolerance = 60;
 
       function matchColor(pos) {
-        const r = data[pos];
-        const g = data[pos + 1];
-        const b = data[pos + 2];
-        const a = data[pos + 3];
-
-        return Math.abs(r - targetR) <= tolerance &&
-               Math.abs(g - targetG) <= tolerance &&
-               Math.abs(b - targetB) <= tolerance &&
-               Math.abs(a - targetA) <= tolerance;
+        return Math.abs(data[pos] - targetR) <= tolerance &&
+               Math.abs(data[pos + 1] - targetG) <= tolerance &&
+               Math.abs(data[pos + 2] - targetB) <= tolerance &&
+               Math.abs(data[pos + 3] - targetA) <= tolerance;
       }
 
       const pixelStack = [[startX, startY]];
@@ -447,7 +495,6 @@
         const newPos = pixelStack.pop();
         const x = newPos[0];
         let y = newPos[1];
-
         let pixelPos = (y * width + x) * 4;
 
         while (y >= 0 && matchColor(pixelPos)) {
@@ -458,8 +505,7 @@
         pixelPos += width * 4;
         y++;
 
-        let reachLeft = false;
-        let reachRight = false;
+        let reachLeft = false, reachRight = false;
 
         while (y < height && matchColor(pixelPos)) {
           data[pixelPos] = fillRgb[0];
@@ -469,24 +515,14 @@
 
           if (x > 0) {
             if (matchColor(pixelPos - 4)) {
-              if (!reachLeft) {
-                pixelStack.push([x - 1, y]);
-                reachLeft = true;
-              }
-            } else if (reachLeft) {
-              reachLeft = false;
-            }
+              if (!reachLeft) { pixelStack.push([x - 1, y]); reachLeft = true; }
+            } else if (reachLeft) reachLeft = false;
           }
 
           if (x < width - 1) {
             if (matchColor(pixelPos + 4)) {
-              if (!reachRight) {
-                pixelStack.push([x + 1, y]);
-                reachRight = true;
-              }
-            } else if (reachRight) {
-              reachRight = false;
-            }
+              if (!reachRight) { pixelStack.push([x + 1, y]); reachRight = true; }
+            } else if (reachRight) reachRight = false;
           }
 
           y++;
@@ -503,8 +539,7 @@
       const coords = getCoords(e);
 
       if (type === 'fill') {
-        const color = document.getElementById('color-picker').value;
-        floodFill(coords.x, coords.y, color);
+        floodFill(coords.x, coords.y, document.getElementById('color-picker').value);
         return;
       }
 
@@ -523,50 +558,15 @@
 
     function endStroke() {
       if (!isDrawing) return;
-      const type = document.getElementById('brush-type').value;
-
-      if (type === 'tapered' || type === 'japanese') {
-        let fadeSteps = 5;
-        let fadeWidth = currentLineWidth;
-        let stepX = (lastX - (lastX - 2)) / fadeSteps;
-        let stepY = (lastY - (lastY - 2)) / fadeSteps;
-
-        const fadeInterval = setInterval(() => {
-          if (fadeSteps <= 0 || fadeWidth <= 0.5) {
-            clearInterval(fadeInterval);
-            isDrawing = false;
-            if (ctx) ctx.beginPath();
-            saveStateToHistory(); 
-            return;
-          }
-
-          ctx.beginPath();
-          ctx.strokeStyle = document.getElementById('color-picker').value;
-          ctx.lineWidth = fadeWidth;
-          ctx.lineCap = 'round';
-          ctx.moveTo(lastX, lastY);
-          
-          lastX += stepX;
-          lastY += stepY;
-          ctx.lineTo(lastX, lastY);
-          ctx.stroke();
-
-          fadeWidth *= 0.6;
-          fadeSteps--;
-        }, 10);
-      } else {
-        isDrawing = false;
-        if (ctx) ctx.beginPath();
-        saveStateToHistory(); 
-      }
+      isDrawing = false;
+      if (ctx) ctx.beginPath();
+      saveStateToHistory();
     }
 
     function draw(e) {
       if (!isDrawing) return;
       const coords = getCoords(e);
-      const x = coords.x;
-      const y = coords.y;
-
+      const x = coords.x, y = coords.y;
       const color = document.getElementById('color-picker').value;
       const baseSize = parseInt(document.getElementById('brush-size').value);
       const type = document.getElementById('brush-type').value;
@@ -577,86 +577,25 @@
       if (type === 'tapered') {
         const now = Date.now();
         const dist = Math.hypot(x - lastX, y - lastY);
-        const time = Math.max(1, now - lastTime);
-        const speed = dist / time;
-
-        const targetWidth = Math.max(1, baseSize - speed * 1.5);
-        currentLineWidth = currentLineWidth * 0.7 + targetWidth * 0.3;
+        const speed = dist / Math.max(1, now - lastTime);
+        currentLineWidth = currentLineWidth * 0.7 + Math.max(1, baseSize - speed * 1.5) * 0.3;
 
         ctx.lineWidth = currentLineWidth;
         ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.shadowBlur = 0;
         ctx.beginPath();
         ctx.moveTo(lastX, lastY);
         ctx.lineTo(x, y);
         ctx.stroke();
         lastTime = now;
-
       } else if (type === 'round') {
         ctx.lineWidth = baseSize;
         ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.shadowBlur = 0;
         ctx.beginPath();
         ctx.moveTo(lastX, lastY);
         ctx.lineTo(x, y);
         ctx.stroke();
-
-      } else if (type === 'pencil') {
-        ctx.lineWidth = Math.max(1, baseSize * 0.5);
-        ctx.lineCap = 'round';
-        ctx.globalAlpha = 0.4;
-        ctx.shadowBlur = 0;
-        ctx.beginPath();
-        ctx.moveTo(lastX, lastY);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-        ctx.globalAlpha = 1.0;
-
-      } else if (type === 'chisel') {
-        ctx.lineWidth = baseSize;
-        ctx.lineCap = 'square';
-        ctx.shadowBlur = 0;
-        ctx.beginPath();
-        ctx.moveTo(lastX, lastY);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-
-      } else if (type === 'japanese') {
-        const now = Date.now();
-        const dist = Math.hypot(x - lastX, y - lastY);
-        const time = Math.max(1, now - lastTime);
-        const speed = dist / time;
-        
-        currentLineWidth = Math.max(2, baseSize - speed * 3);
-        ctx.lineWidth = currentLineWidth;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.shadowBlur = 0;
-        ctx.beginPath();
-        ctx.moveTo(lastX, lastY);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-        lastTime = now;
-
-      } else if (type === 'soft') {
-        ctx.lineWidth = baseSize;
-        ctx.lineCap = 'round';
-        ctx.globalAlpha = 0.2;
-        ctx.shadowColor = color;
-        ctx.shadowBlur = baseSize / 2;
-        ctx.beginPath();
-        ctx.moveTo(lastX, lastY);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-        ctx.globalAlpha = 1.0;
-        ctx.shadowBlur = 0;
-
       } else if (type === 'spray') {
-        ctx.shadowBlur = 0;
-        const density = baseSize * 2;
-        for (let i = 0; i < density; i++) {
+        for (let i = 0; i < baseSize * 2; i++) {
           const offsetX = (Math.random() - 0.5) * baseSize * 2;
           const offsetY = (Math.random() - 0.5) * baseSize * 2;
           if (Math.hypot(offsetX, offsetY) <= baseSize) {
@@ -675,22 +614,31 @@
         try {
           const result = await eyeDropper.open();
           document.getElementById('color-picker').value = result.sRGBHex;
-        } catch (e) { console.log("Отмена"); }
+        } catch (e) {}
       } else {
-        alert("Пипетка поддерживает мобильные браузеры Chrome/Edge.");
+        alert("Пипетка доступна в браузерах Chrome/Edge.");
       }
     }
 
-    function saveDrawing() {
+    async function saveDrawing() {
+      const btn = document.getElementById('save-btn');
+      btn.innerText = 'Сохранение...';
+      btn.disabled = true;
+
       const canvas = document.getElementById('paint-canvas');
-      currentBook.pages[currentPageIndex].progress = canvas.toDataURL('image/jpeg', 0.8);
-      saveBookToDB();
-      alert("Сохранено!");
+      currentBook.pages[currentPageIndex].progress = canvas.toDataURL('image/jpeg', 0.7);
+      
+      await saveBookToCloud();
+      
+      btn.innerText = '💾 Сохранить в облако';
+      btn.disabled = false;
+      alert("Сохранено в облако!");
     }
 
-    function saveBookToDB() {
-      const tx = db.transaction("books", "readwrite");
-      tx.objectStore("books").put(currentBook);
+    function saveBookToCloud() {
+      return db.collection("books").doc(currentBook.id).update({
+        pages: currentBook.pages
+      });
     }
 
     function closeEditor() {

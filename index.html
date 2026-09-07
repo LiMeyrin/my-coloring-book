@@ -282,9 +282,7 @@
     let isEyedropperActive = false;
     let ctx;
     
-    let points = []; // Массив точек для сглаживания линии
-    let lastTime = 0;
-    let currentLineWidth = 10;
+    let strokePoints = []; 
     let currentColor = '#ff0000';
     
     let zoomScale = 1;
@@ -530,8 +528,10 @@
     }
 
     function handlePointerDown(e) {
-      activePointers.set(e.pointerId, e);
+      // Игнорируем всё, кроме стилуса (pen)
+      if (e.pointerType !== 'pen') return;
 
+      activePointers.set(e.pointerId, e);
       const coords = getCoords(e);
 
       if (isEyedropperActive) {
@@ -561,14 +561,13 @@
         }
 
         isDrawing = true;
-        points = [{ x: coords.x, y: coords.y }];
-        lastTime = Date.now();
-        currentLineWidth = parseInt(document.getElementById('brush-size').value);
-        draw(e);
+        strokePoints = [{ x: coords.x, y: coords.y, pressure: e.pressure || 0.5 }];
       }
     }
 
     function handlePointerMove(e) {
+      if (e.pointerType !== 'pen') return;
+
       if (activePointers.has(e.pointerId)) {
         activePointers.set(e.pointerId, e);
       }
@@ -584,7 +583,9 @@
       }
 
       if (isDrawing && activePointers.size === 1) {
-        draw(e);
+        const coords = getCoords(e);
+        strokePoints.push({ x: coords.x, y: coords.y, pressure: e.pressure || 0.5 });
+        redrawCurrentStroke();
         return;
       }
 
@@ -596,6 +597,7 @@
     }
 
     function handlePointerUp(e) {
+      if (e.pointerType !== 'pen' && activePointers.size === 0) return;
       activePointers.delete(e.pointerId);
 
       if (activePointers.size < 2) {
@@ -606,7 +608,10 @@
       }
 
       if (isDrawing) {
-        endStroke(e);
+        isDrawing = false;
+        redrawCurrentStroke();
+        strokePoints = [];
+        saveStateToHistory();
       }
     }
 
@@ -614,8 +619,8 @@
       const canvas = document.getElementById('paint-canvas');
       const rect = canvas.getBoundingClientRect();
       return {
-        x: Math.floor((e.clientX - rect.left) / zoomScale),
-        y: Math.floor((e.clientY - rect.top) / zoomScale)
+        x: (e.clientX - rect.left) / zoomScale,
+        y: (e.clientY - rect.top) / zoomScale
       };
     }
 
@@ -644,8 +649,10 @@
       const canvas = document.getElementById('paint-canvas');
       const width = canvas.width;
       const height = canvas.height;
+      const sX = Math.floor(startX);
+      const sY = Math.floor(startY);
       
-      if (startX < 0 || startX >= width || startY < 0 || startY >= height) return;
+      if (sX < 0 || sX >= width || sY < 0 || sY >= height) return;
 
       const imgData = ctx.getImageData(0, 0, width, height);
       const data = imgData.data;
@@ -659,10 +666,10 @@
         return ((r + g + b) / 3) < 120 || a < 50; 
       }
 
-      const startPos = (startY * width + startX) * 4;
+      const startPos = (sY * width + sX) * 4;
       if (isBorder(startPos)) return;
 
-      const pixelStack = [[startX, startY]];
+      const pixelStack = [[sX, sY]];
 
       while (pixelStack.length > 0) {
         const newPos = pixelStack.pop();
@@ -726,108 +733,73 @@
       saveStateToHistory();
     }
 
-    function endStroke(e) {
-      if (!isDrawing) return;
-      isDrawing = false;
-      points = [];
-      saveStateToHistory(); 
-    }
-
-    function draw(e) {
-      if (!isDrawing) return;
-      const coords = getCoords(e);
-      points.push({ x: coords.x, y: coords.y });
-
-      // Нужны минимум 3 точки для уверенной кривой Безье
-      if (points.length < 3) return;
-
-      let baseSize = parseInt(document.getElementById('brush-size').value);
-      
-      if (e.pressure && e.pressure > 0 && e.pressure !== 0.5) {
-        baseSize = baseSize * e.pressure * 1.5;
+    // Рендер штриха с профессиональными сужающимися концами (без кругов в начале/конце)
+    function redrawCurrentStroke() {
+      if (undoHistory.length > 0) {
+        ctx.putImageData(undoHistory[undoHistory.length - 1], 0, 0);
       }
+      if (strokePoints.length < 2) return;
 
+      const baseSize = parseInt(document.getElementById('brush-size').value);
       const type = document.getElementById('brush-type').value;
+      const totalPoints = strokePoints.length;
 
+      ctx.save();
       ctx.strokeStyle = currentColor;
       ctx.fillStyle = currentColor;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
 
-      // Вычисляем среднюю точку между предыдущей и текущей для сглаживания
-      const xc = (points[points.length - 2].x + points[points.length - 1].x) / 2;
-      const yc = (points[points.length - 2].y + points[points.length - 1].y) / 2;
-
-      if (type === 'tapered' || type === 'japanese') {
-        const now = Date.now();
-        const dist = Math.hypot(coords.x - points[points.length - 2].x, coords.y - points[points.length - 2].y);
-        const time = Math.max(1, now - lastTime);
-        const speed = dist / time;
-
-        const targetWidth = Math.max(1, baseSize - speed * 1.5);
-        currentLineWidth = currentLineWidth * 0.7 + targetWidth * 0.3;
-        ctx.lineWidth = currentLineWidth;
-        ctx.shadowBlur = 0;
-
-        ctx.beginPath();
-        ctx.moveTo(points[points.length - 3].x, points[points.length - 3].y);
-        ctx.quadraticCurveTo(points[points.length - 2].x, points[points.length - 2].y, xc, yc);
-        ctx.stroke();
-        lastTime = now;
-
-      } else if (type === 'round') {
-        ctx.lineWidth = baseSize;
-        ctx.shadowBlur = 0;
-        ctx.beginPath();
-        ctx.moveTo(points[points.length - 3].x, points[points.length - 3].y);
-        ctx.quadraticCurveTo(points[points.length - 2].x, points[points.length - 2].y, xc, yc);
-        ctx.stroke();
-
-      } else if (type === 'pencil') {
-        ctx.lineWidth = Math.max(1, baseSize * 0.5);
-        ctx.globalAlpha = 0.4;
-        ctx.shadowBlur = 0;
-        ctx.beginPath();
-        ctx.moveTo(points[points.length - 3].x, points[points.length - 3].y);
-        ctx.quadraticCurveTo(points[points.length - 2].x, points[points.length - 2].y, xc, yc);
-        ctx.stroke();
-        ctx.globalAlpha = 1.0;
-
-      } else if (type === 'chisel') {
-        ctx.lineWidth = baseSize;
-        ctx.lineCap = 'square';
-        ctx.shadowBlur = 0;
-        ctx.beginPath();
-        ctx.moveTo(points[points.length - 3].x, points[points.length - 3].y);
-        ctx.quadraticCurveTo(points[points.length - 2].x, points[points.length - 2].y, xc, yc);
-        ctx.stroke();
-
-      } else if (type === 'soft') {
-        ctx.lineWidth = baseSize;
-        ctx.globalAlpha = 0.2;
-        ctx.shadowColor = currentColor;
-        ctx.shadowBlur = baseSize / 2;
-        ctx.beginPath();
-        ctx.moveTo(points[points.length - 3].x, points[points.length - 3].y);
-        ctx.quadraticCurveTo(points[points.length - 2].x, points[points.length - 2].y, xc, yc);
-        ctx.stroke();
-        ctx.globalAlpha = 1.0;
-        ctx.shadowBlur = 0;
-
-      } else if (type === 'spray') {
+      if (type === 'spray') {
         ctx.shadowBlur = 0;
         const density = baseSize * 2;
-        for (let i = 0; i < density; i++) {
-          const offsetX = (Math.random() - 0.5) * baseSize * 2;
-          const offsetY = (Math.random() - 0.5) * baseSize * 2;
-          if (Math.hypot(offsetX, offsetY) <= baseSize) {
-            ctx.fillRect(coords.x + offsetX, coords.y + offsetY, 1, 1);
+        strokePoints.forEach(pt => {
+          for (let i = 0; i < density; i++) {
+            const offsetX = (Math.random() - 0.5) * baseSize * 2;
+            const offsetY = (Math.random() - 0.5) * baseSize * 2;
+            if (Math.hypot(offsetX, offsetY) <= baseSize) {
+              ctx.fillRect(pt.x + offsetX, pt.y + offsetY, 1, 1);
+            }
           }
-        }
+        });
+        ctx.restore();
+        return;
       }
 
-      // Оставляем последние 2 точки для построения следующего сегмента
-      points.shift();
+      // Отрисовка линии сегментами с переменной толщиной (острые концы)
+      for (let i = 0; i < totalPoints - 1; i++) {
+        const p1 = strokePoints[i];
+        const p2 = strokePoints[i + 1];
+
+        // Коэффициент для плавного сужения в начале и конце штриха
+        let progress = i / totalPoints;
+        let widthFactor = 1;
+
+        if (type === 'tapered' || type === 'japanese') {
+          // Плавное сужение к первому и последнему процентам штриха
+          if (progress < 0.15) {
+            widthFactor = progress / 0.15;
+          } else if (progress > 0.85) {
+            widthFactor = (1 - progress) / 0.15;
+          }
+        }
+
+        let currentWidth = Math.max(0.5, baseSize * widthFactor * (p2.pressure || 0.5) * 1.5);
+        if (type === 'pencil') currentWidth = Math.max(1, currentWidth * 0.5);
+
+        ctx.lineWidth = currentWidth;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        if (type === 'pencil') ctx.globalAlpha = 0.4;
+        else if (type === 'soft') ctx.globalAlpha = 0.2;
+        else ctx.globalAlpha = 1.0;
+
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+      }
+
+      ctx.restore();
     }
 
     function saveDrawing() {

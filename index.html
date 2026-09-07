@@ -76,7 +76,6 @@
     .toolbar label { font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; }
     .toolbar select, .toolbar input[type="range"] { width: 100%; margin-top: 4px; padding: 6px; }
     
-    /* Кнопка выбора цвета */
     .color-preview-btn {
       display: flex;
       align-items: center;
@@ -94,7 +93,6 @@
       border: 2px solid #fff; box-shadow: 0 0 4px rgba(0,0,0,0.3);
     }
 
-    /* Модальное окно Палитры */
     .palette-card {
       background: white; border-radius: 16px; padding: 20px;
       width: 320px; max-width: 90vw; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
@@ -139,7 +137,6 @@
       cursor: crosshair !important;
     }
 
-    /* Уведомление о режиме пипетки */
     #eyedropper-banner {
       position: absolute;
       top: 10px;
@@ -194,7 +191,6 @@
     <div class="modal-actions" id="modal-actions"></div>
   </div>
 
-  <!-- Окно выбора цвета (Палитра) -->
   <div id="color-modal" class="modal hidden">
     <div class="palette-card">
       <h3>Выбор цвета</h3>
@@ -256,7 +252,7 @@
       <input type="range" id="brush-size" min="1" max="60" value="10" oninput="document.getElementById('brush-size-val').innerText = this.value">
 
       <label>🔍 Масштаб: <span id="zoom-val">100</span>%</label>
-      <input type="range" id="editor-zoom" min="50" max="300" value="100" oninput="setCanvasZoom(this.value / 100)">
+      <input type="range" id="editor-zoom" min="50" max="500" value="100" oninput="setCanvasZoom(this.value / 100)">
 
       <button class="btn btn-secondary" onclick="undoStroke()">⎌ Отменить</button>
       
@@ -288,13 +284,11 @@
     let currentLineWidth = 10;
     let currentColor = '#ff0000';
     
-    // Панорамирование и зум
     let zoomScale = 1;
     let panX = 0, panY = 0;
     let isPanning = false;
     let startPanX = 0, startPanY = 0;
 
-    // Касания для мультитача
     let activePointers = new Map();
     let initialPinchDist = null;
     let initialZoomOnPinch = 1;
@@ -528,7 +522,7 @@
     }
 
     function setCanvasZoom(newScale) {
-      zoomScale = Math.max(0.5, Math.min(3, newScale));
+      zoomScale = Math.max(0.5, Math.min(5, newScale));
       updateTransform();
     }
 
@@ -582,7 +576,7 @@
         const currentDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
         const scaleChange = currentDist / initialPinchDist;
         
-        zoomScale = Math.max(0.5, Math.min(3, initialZoomOnPinch * scaleChange));
+        zoomScale = Math.max(0.5, Math.min(5, initialZoomOnPinch * scaleChange));
         updateTransform();
         return;
       }

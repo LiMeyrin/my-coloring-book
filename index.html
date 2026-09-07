@@ -293,6 +293,9 @@
     let activePointers = new Map();
     let initialPinchDist = null;
     let initialZoomOnPinch = 1;
+    let initialPanXOnPinch = 0;
+    let initialPanYOnPinch = 0;
+    let pinchCenter = { x: 0, y: 0 };
 
     let undoHistory = [];
     const MAX_UNDO_STEPS = 20;
@@ -528,68 +531,87 @@
     }
 
     function handlePointerDown(e) {
-      // Игнорируем всё, кроме стилуса (pen)
-      if (e.pointerType !== 'pen') return;
+      // Рисуем и выбираем пипеткой ТОЛЬКО стилусом (pen)
+      if (e.pointerType === 'pen') {
+        activePointers.set(e.pointerId, e);
+        const coords = getCoords(e);
 
-      activePointers.set(e.pointerId, e);
-      const coords = getCoords(e);
-
-      if (isEyedropperActive) {
-        pickColorFromCanvas(coords.x, coords.y);
-        return;
-      }
-
-      const brushType = document.getElementById('brush-type').value;
-
-      if (activePointers.size >= 2) {
-        isDrawing = false;
-        isPanning = false;
-        const pts = Array.from(activePointers.values());
-        initialPinchDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
-        initialZoomOnPinch = zoomScale;
-        return;
-      }
-
-      if (brushType === 'none') {
-        isPanning = true;
-        startPanX = e.clientX - panX;
-        startPanY = e.clientY - panY;
-      } else {
-        if (brushType === 'fill') {
-          floodFill(coords.x, coords.y, currentColor);
+        if (isEyedropperActive) {
+          pickColorFromCanvas(coords.x, coords.y);
           return;
         }
 
-        isDrawing = true;
-        strokePoints = [{ x: coords.x, y: coords.y, pressure: e.pressure || 0.5 }];
+        const brushType = document.getElementById('brush-type').value;
+        if (brushType === 'fill') {
+          floodFill(coords.x, coords.y, currentColor);
+          return;
+        } else if (brushType !== 'none') {
+          isDrawing = true;
+          strokePoints = [{ x: coords.x, y: coords.y, pressure: e.pressure || 0.5 }];
+        }
+        return;
+      }
+
+      // Пальцы (touch) используются исключительно для перемещения и зума
+      if (e.pointerType === 'touch') {
+        activePointers.set(e.pointerId, e);
+
+        if (activePointers.size === 2) {
+          isDrawing = false;
+          isPanning = false;
+          const pts = Array.from(activePointers.values());
+          initialPinchDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
+          initialZoomOnPinch = zoomScale;
+          initialPanXOnPinch = panX;
+          initialPanYOnPinch = panY;
+          pinchCenter = {
+            x: (pts[0].clientX + pts[1].clientX) / 2,
+            y: (pts[0].clientY + pts[1].clientY) / 2
+          };
+        } else if (activePointers.size === 1) {
+          isPanning = true;
+          startPanX = e.clientX - panX;
+          startPanY = e.clientY - panY;
+        }
       }
     }
 
     function handlePointerMove(e) {
-      if (e.pointerType !== 'pen') return;
-
       if (activePointers.has(e.pointerId)) {
         activePointers.set(e.pointerId, e);
       }
 
-      if (activePointers.size >= 2 && initialPinchDist) {
-        const pts = Array.from(activePointers.values());
-        const currentDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
-        const scaleChange = currentDist / initialPinchDist;
-        
-        zoomScale = Math.max(0.5, Math.min(5, initialZoomOnPinch * scaleChange));
-        updateTransform();
-        return;
-      }
-
-      if (isDrawing && activePointers.size === 1) {
+      // Обработка рисования стилусом
+      if (e.pointerType === 'pen' && isDrawing) {
         const coords = getCoords(e);
         strokePoints.push({ x: coords.x, y: coords.y, pressure: e.pressure || 0.5 });
         redrawCurrentStroke();
         return;
       }
 
-      if (isPanning && activePointers.size === 1) {
+      // Масштабирование двумя пальцами (pinch-to-zoom)
+      if (activePointers.size >= 2 && initialPinchDist) {
+        const pts = Array.from(activePointers.values());
+        const currentDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
+        const scaleChange = currentDist / initialPinchDist;
+        
+        const newZoom = Math.max(0.5, Math.min(5, initialZoomOnPinch * scaleChange));
+        
+        const currentCenter = {
+          x: (pts[0].clientX + pts[1].clientX) / 2,
+          y: (pts[0].clientY + pts[1].clientY) / 2
+        };
+
+        panX = initialPanXOnPinch + (currentCenter.x - pinchCenter.x);
+        panY = initialPanYOnPinch + (currentCenter.y - pinchCenter.y);
+        zoomScale = newZoom;
+
+        updateTransform();
+        return;
+      }
+
+      // Перемещение холста одним пальцем (если кисть не выбрана или режим панорамирования)
+      if (isPanning && activePointers.size === 1 && e.pointerType === 'touch') {
         panX = e.clientX - startPanX;
         panY = e.clientY - startPanY;
         updateTransform();
@@ -597,7 +619,7 @@
     }
 
     function handlePointerUp(e) {
-      if (e.pointerType !== 'pen' && activePointers.size === 0) return;
+      if (!activePointers.has(e.pointerId)) return;
       activePointers.delete(e.pointerId);
 
       if (activePointers.size < 2) {
@@ -607,7 +629,7 @@
         isPanning = false;
       }
 
-      if (isDrawing) {
+      if (e.pointerType === 'pen' && isDrawing) {
         isDrawing = false;
         redrawCurrentStroke();
         strokePoints = [];
@@ -733,7 +755,6 @@
       saveStateToHistory();
     }
 
-    // Рендер штриха с профессиональными сужающимися концами (без кругов в начале/конце)
     function redrawCurrentStroke() {
       if (undoHistory.length > 0) {
         ctx.putImageData(undoHistory[undoHistory.length - 1], 0, 0);
@@ -764,17 +785,14 @@
         return;
       }
 
-      // Отрисовка линии сегментами с переменной толщиной (острые концы)
       for (let i = 0; i < totalPoints - 1; i++) {
         const p1 = strokePoints[i];
         const p2 = strokePoints[i + 1];
 
-        // Коэффициент для плавного сужения в начале и конце штриха
         let progress = i / totalPoints;
         let widthFactor = 1;
 
         if (type === 'tapered' || type === 'japanese') {
-          // Плавное сужение к первому и последнему процентам штриха
           if (progress < 0.15) {
             widthFactor = progress / 0.15;
           } else if (progress > 0.85) {

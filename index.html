@@ -13,7 +13,7 @@
       --primary-hover: #5a4bcf;
     }
     * { 
-      touch-action: none; /* Отключаем стандартные жесты браузера (скролл/зум) на всём приложении */
+      touch-action: none;
       box-sizing: border-box; 
     }
     body {
@@ -68,7 +68,7 @@
       width: 230px; background: white; padding: 12px; border-radius: 12px;
       display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);
       overflow-y: auto; flex-shrink: 0;
-      touch-action: pan-y; /* Важно: разрешает скроллить панель инструментов пальцем */
+      touch-action: pan-y;
     }
     .toolbar label { font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; }
     .toolbar select, .toolbar input[type="range"] { width: 100%; margin-top: 4px; }
@@ -83,14 +83,14 @@
       border-radius: 12px; 
       padding: 20px; 
       position: relative;
-      touch-action: pan-x pan-y; /* Позволяет скроллить холст при приближении */
+      touch-action: pan-x pan-y;
     }
     
     canvas { 
       background: white; 
       border-radius: 8px; 
       box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
-      touch-action: none; /* Запрещает скроллить сам холст пальцем/стилусом при рисовании */
+      touch-action: none;
       transform-origin: top left;
     }
 
@@ -184,6 +184,11 @@
     let currentZoom = 1;
     let currentLineWidth = 10;
     
+    // Переменные для жеста масштабирования (Pinch-to-Zoom)
+    let activePointers = new Map();
+    let initialPinchDistance = null;
+    let initialZoomOnPinch = 1;
+
     let undoHistory = [];
     const MAX_UNDO_STEPS = 20;
 
@@ -353,11 +358,94 @@
       };
       img.src = page.progress || page.original;
 
-      // Универсальные события для поддержки Стилуса, Пальца и Мыши
-      canvas.onpointerdown = startStroke;
-      canvas.onpointermove = moveStroke;
-      canvas.onpointerup = endStroke;
-      canvas.onpointercancel = endStroke;
+      // Обработчики касаний
+      canvas.onpointerdown = handlePointerDown;
+      canvas.onpointermove = handlePointerMove;
+      canvas.onpointerup = handlePointerUp;
+      canvas.onpointercancel = handlePointerUp;
+    }
+
+    function handlePointerDown(e) {
+      activePointers.set(e.pointerId, e);
+
+      // Если касаются пальцы (touch)
+      if (e.pointerType === 'touch') {
+        if (activePointers.size === 2) {
+          // Инициализация Pinch-to-Zoom при касании двумя пальцами
+          const points = Array.from(activePointers.values());
+          initialPinchDistance = Math.hypot(
+            points[0].clientX - points[1].clientX,
+            points[0].clientY - points[1].clientY
+          );
+          initialZoomOnPinch = currentZoom;
+        }
+        return; // Пальцы не рисуют
+      }
+
+      // Рисовать разрешено ТОЛЬКО стилусом ('pen')
+      if (e.pointerType !== 'pen') return;
+
+      if (e.target.setPointerCapture) {
+        e.target.setPointerCapture(e.pointerId);
+      }
+
+      const type = document.getElementById('brush-type').value;
+      const coords = getCoords(e);
+
+      if (type === 'fill') {
+        const color = document.getElementById('color-picker').value;
+        floodFill(coords.x, coords.y, color);
+        return;
+      }
+
+      isDrawing = true;
+      lastX = coords.x;
+      lastY = coords.y;
+      lastTime = Date.now();
+      currentLineWidth = parseInt(document.getElementById('brush-size').value);
+      draw(e);
+    }
+
+    function handlePointerMove(e) {
+      if (activePointers.has(e.pointerId)) {
+        activePointers.set(e.pointerId, e);
+      }
+
+      // Обработка жеста зума пальцами
+      if (e.pointerType === 'touch' && activePointers.size === 2 && initialPinchDistance) {
+        const points = Array.from(activePointers.values());
+        const currentDistance = Math.hypot(
+          points[0].clientX - points[1].clientX,
+          points[0].clientY - points[1].clientY
+        );
+
+        const scaleChange = currentDistance / initialPinchDistance;
+        let newZoom = Math.round(initialZoomOnPinch * scaleChange * 100);
+        
+        // Ограничиваем зум от 50% до 300%
+        newZoom = Math.max(50, Math.min(300, newZoom));
+        
+        document.getElementById('editor-zoom').value = newZoom;
+        setCanvasZoom(newZoom);
+        return;
+      }
+
+      // Рисование стилусом
+      if (isDrawing && e.pointerType === 'pen') {
+        draw(e);
+      }
+    }
+
+    function handlePointerUp(e) {
+      activePointers.delete(e.pointerId);
+
+      if (activePointers.size < 2) {
+        initialPinchDistance = null;
+      }
+
+      if (e.pointerType === 'pen') {
+        endStroke(e);
+      }
     }
 
     function saveStateToHistory() {
@@ -492,34 +580,6 @@
       saveStateToHistory();
     }
 
-    function startStroke(e) {
-      // Блокируем захват указателя браузером, чтобы линия не «рвалась» при быстром ведении
-      if (e.target.setPointerCapture) {
-        e.target.setPointerCapture(e.pointerId);
-      }
-
-      const type = document.getElementById('brush-type').value;
-      const coords = getCoords(e);
-
-      if (type === 'fill') {
-        const color = document.getElementById('color-picker').value;
-        floodFill(coords.x, coords.y, color);
-        return;
-      }
-
-      isDrawing = true;
-      lastX = coords.x;
-      lastY = coords.y;
-      lastTime = Date.now();
-      currentLineWidth = parseInt(document.getElementById('brush-size').value);
-      draw(e);
-    }
-
-    function moveStroke(e) {
-      if (!isDrawing) return;
-      draw(e);
-    }
-
     function endStroke(e) {
       if (!isDrawing) return;
       if (e && e.target.releasePointerCapture) {
@@ -573,7 +633,6 @@
       const color = document.getElementById('color-picker').value;
       let baseSize = parseInt(document.getElementById('brush-size').value);
       
-      // Учитываем силу нажатия стилуса, если планшет её передаёт
       if (e.pressure && e.pressure > 0) {
         baseSize = baseSize * e.pressure * 1.5;
       }

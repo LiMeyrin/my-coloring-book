@@ -701,7 +701,7 @@
         const currentDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
         const scaleChange = currentDist / initialPinchDist;
         
-        const newZoom = Math.max(0.5, Math.min(5, initialZoomOnPinch * scaleChange));
+        const newZoom = Math.max(0.5, Math.min(10, initialZoomOnPinch * scaleChange));
         
         const currentCenter = {
           x: (pts[0].clientX + pts[1].clientX) / 2,

@@ -317,7 +317,7 @@
       <input type="range" id="brush-size" min="1" max="60" value="10" oninput="document.getElementById('brush-size-val').innerText = this.value">
 
       <label>🔍 Масштаб: <span id="zoom-val">100</span>%</label>
-      <input type="range" id="editor-zoom" min="50" max="500" value="100" oninput="setCanvasZoom(this.value / 100)">
+      <input type="range" id="editor-zoom" min="50" max="1000" value="100" oninput="setCanvasZoom(this.value / 100)">
 
       <button class="btn btn-secondary" onclick="undoStroke()">⎌ Отменить</button>
       

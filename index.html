@@ -83,7 +83,7 @@
       border-radius: 12px; 
       padding: 20px; 
       position: relative;
-      touch-action: pan-x pan-y;
+      touch-action: none;
     }
     
     canvas { 
@@ -184,7 +184,7 @@
     let currentZoom = 1;
     let currentLineWidth = 10;
     
-    // Переменные для жеста масштабирования (Pinch-to-Zoom)
+    // Переменные для обработки мультитача (жестов)
     let activePointers = new Map();
     let initialPinchDistance = null;
     let initialZoomOnPinch = 1;
@@ -358,7 +358,6 @@
       };
       img.src = page.progress || page.original;
 
-      // Обработчики касаний
       canvas.onpointerdown = handlePointerDown;
       canvas.onpointermove = handlePointerMove;
       canvas.onpointerup = handlePointerUp;
@@ -368,23 +367,22 @@
     function handlePointerDown(e) {
       activePointers.set(e.pointerId, e);
 
-      // Если касаются пальцы (touch)
-      if (e.pointerType === 'touch') {
-        if (activePointers.size === 2) {
-          // Инициализация Pinch-to-Zoom при касании двумя пальцами
-          const points = Array.from(activePointers.values());
-          initialPinchDistance = Math.hypot(
-            points[0].clientX - points[1].clientX,
-            points[0].clientY - points[1].clientY
-          );
-          initialZoomOnPinch = currentZoom;
+      // Если появились 2 или более точек касания — это жест зума пальцами, не рисование
+      if (activePointers.size >= 2) {
+        if (isDrawing) {
+          isDrawing = false;
+          if (undoHistory.length > 0) undoStroke(); // Отменяем случайно начатый штрих от пальца
         }
-        return; // Пальцы не рисуют
+        const points = Array.from(activePointers.values());
+        initialPinchDistance = Math.hypot(
+          points[0].clientX - points[1].clientX,
+          points[0].clientY - points[1].clientY
+        );
+        initialZoomOnPinch = currentZoom;
+        return;
       }
 
-      // Рисовать разрешено ТОЛЬКО стилусом ('pen')
-      if (e.pointerType !== 'pen') return;
-
+      // Если касание ровно одно
       if (e.target.setPointerCapture) {
         e.target.setPointerCapture(e.pointerId);
       }
@@ -411,8 +409,8 @@
         activePointers.set(e.pointerId, e);
       }
 
-      // Обработка жеста зума пальцами
-      if (e.pointerType === 'touch' && activePointers.size === 2 && initialPinchDistance) {
+      // Жест зума двумя пальцами
+      if (activePointers.size >= 2 && initialPinchDistance) {
         const points = Array.from(activePointers.values());
         const currentDistance = Math.hypot(
           points[0].clientX - points[1].clientX,
@@ -422,7 +420,6 @@
         const scaleChange = currentDistance / initialPinchDistance;
         let newZoom = Math.round(initialZoomOnPinch * scaleChange * 100);
         
-        // Ограничиваем зум от 50% до 300%
         newZoom = Math.max(50, Math.min(300, newZoom));
         
         document.getElementById('editor-zoom').value = newZoom;
@@ -430,8 +427,8 @@
         return;
       }
 
-      // Рисование стилусом
-      if (isDrawing && e.pointerType === 'pen') {
+      // Процесс рисования
+      if (isDrawing && activePointers.size === 1) {
         draw(e);
       }
     }
@@ -443,7 +440,7 @@
         initialPinchDistance = null;
       }
 
-      if (e.pointerType === 'pen') {
+      if (isDrawing && activePointers.size === 0) {
         endStroke(e);
       }
     }
@@ -633,7 +630,8 @@
       const color = document.getElementById('color-picker').value;
       let baseSize = parseInt(document.getElementById('brush-size').value);
       
-      if (e.pressure && e.pressure > 0) {
+      // Динамическое изменение толщины от силы нажатия пером
+      if (e.pressure && e.pressure > 0 && e.pressure !== 0.5) {
         baseSize = baseSize * e.pressure * 1.5;
       }
 

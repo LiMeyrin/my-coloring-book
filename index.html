@@ -30,6 +30,7 @@
       font-weight: 600; transition: background 0.2s; font-size: 14px;
     }
     .btn:hover { background: var(--primary-hover); }
+    .btn:disabled { background: #b2bec3; cursor: not-allowed; }
     .btn-secondary { background: #b2bec3; }
     .btn-danger { background: #ff7675; }
 
@@ -105,7 +106,7 @@
   <div id="main-view">
     <header>
       <h1>🎨 Мои Раскраски</h1>
-      <button class="btn" onclick="document.getElementById('pdf-upload').click()">+ Загрузить PDF</button>
+      <button class="btn" id="upload-btn" onclick="document.getElementById('pdf-upload').click()">+ Загрузить PDF</button>
       <input type="file" id="pdf-upload" accept="application/pdf" class="hidden" onchange="uploadPDF(event)">
     </header>
     <div id="pdf-grid" class="grid"></div>
@@ -192,11 +193,16 @@
     const request = indexedDB.open("ColoringAppDB", 1);
     request.onupgradeneeded = (e) => {
       db = e.target.result;
-      db.createObjectStore("books", { keyPath: "id", autoIncrement: true });
+      if (!db.objectStoreNames.contains("books")) {
+        db.createObjectStore("books", { keyPath: "id", autoIncrement: true });
+      }
     };
     request.onsuccess = (e) => {
       db = e.target.result;
       loadBooks();
+    };
+    request.onerror = (e) => {
+      console.error("Ошибка при открытии IndexedDB:", e);
     };
 
     function showView(viewId) {
@@ -208,37 +214,57 @@
       const file = event.target.files[0];
       if (!file) return;
 
-      const title = prompt("Введите название раскраски:", file.name.replace('.pdf', '')) || "Без названия";
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      
-      const pages = [];
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 1.5 });
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
+      const btn = document.getElementById('upload-btn');
+      const originalBtnText = btn.innerText;
+      btn.innerText = 'Загрузка...';
+      btn.disabled = true;
+
+      try {
+        const title = prompt("Введите название раскраски:", file.name.replace(/\.pdf$/i, '')) || "Без названия";
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         
-        // Гарантируем завершение рендеринга каждой страницы
-        await page.render({ canvasContext: context, viewport: viewport }).promise;
-        pages.push({ original: canvas.toDataURL('image/png'), progress: null });
+        const pages = [];
+        for (let i = 1; i <= pdf.numPages; i++) {
+          btn.innerText = `Обработка: ${i}/${pdf.numPages}`;
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: 1.2 });
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+          
+          await page.render({ canvasContext: context, viewport: viewport }).promise;
+          // Сохраняем в JPEG с 0.8 качеством для экономии места и предотвращения ошибок памяти
+          pages.push({ original: canvas.toDataURL('image/jpeg', 0.8), progress: null });
+        }
+
+        if (pages.length === 0) {
+          alert("Файл не содержит страниц.");
+          return;
+        }
+
+        const book = { title, cover: pages[0].original, pages };
+        const tx = db.transaction("books", "readwrite");
+        const store = tx.objectStore("books");
+        
+        const addRequest = store.add(book);
+        addRequest.onsuccess = () => {
+          loadBooks();
+        };
+        addRequest.onerror = (err) => {
+          console.error("Ошибка сохранения в базу:", err);
+          alert("Не удалось сохранить файл. Возможно, он слишком большой.");
+        };
+
+      } catch (err) {
+        console.error("Ошибка обработки PDF:", err);
+        alert("Произошла ошибка при чтении файла PDF.");
+      } finally {
+        btn.innerText = originalBtnText;
+        btn.disabled = false;
+        event.target.value = '';
       }
-
-      if (pages.length === 0) return;
-
-      const book = { title, cover: pages[0].original, pages };
-      const tx = db.transaction("books", "readwrite");
-      const store = tx.objectStore("books");
-      
-      const addRequest = store.add(book);
-      addRequest.onsuccess = () => {
-        loadBooks(); // Перерисовываем список сразу после сохранения
-      };
-      
-      // Сбрасываем значение инпута, чтобы можно было загружать тот же файл повторно
-      event.target.value = '';
     }
 
     function loadBooks() {
@@ -561,7 +587,7 @@
 
     function saveDrawing() {
       const canvas = document.getElementById('paint-canvas');
-      currentBook.pages[currentPageIndex].progress = canvas.toDataURL();
+      currentBook.pages[currentPageIndex].progress = canvas.toDataURL('image/jpeg', 0.8);
       saveBookToDB();
       alert("Сохранено!");
     }

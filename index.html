@@ -185,7 +185,7 @@
     }
     
     #canvas-container {
-      transform-origin: center center;
+      transform-origin: 0 0;
       position: absolute;
       will-change: transform;
     }
@@ -359,6 +359,7 @@
     let initialPanXOnPinch = 0;
     let initialPanYOnPinch = 0;
     let pinchCenter = { x: 0, y: 0 };
+    let pinchedLocalCenter = null;
 
     let undoHistory = [];
     const MAX_UNDO_STEPS = 20;
@@ -676,6 +677,11 @@
             x: (pts[0].clientX + pts[1].clientX) / 2,
             y: (pts[0].clientY + pts[1].clientY) / 2
           };
+          const wrapperRect = document.getElementById('canvas-wrapper').getBoundingClientRect();
+          pinchedLocalCenter = {
+            x: (pinchCenter.x - wrapperRect.left - initialPanXOnPinch) / initialZoomOnPinch,
+            y: (pinchCenter.y - wrapperRect.top - initialPanYOnPinch) / initialZoomOnPinch
+          };
         } else if (activePointers.size === 1) {
           isPanning = true;
           startPanX = e.clientX - panX;
@@ -699,8 +705,9 @@
       if (activePointers.size >= 2 && initialPinchDist) {
         const pts = Array.from(activePointers.values());
         const currentDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
-        const scaleChange = currentDist / initialPinchDist;
+        if (initialPinchDist === 0) return;
         
+        const scaleChange = currentDist / initialPinchDist;
         const newZoom = Math.max(0.5, Math.min(20, initialZoomOnPinch * scaleChange));
         
         const currentCenter = {
@@ -708,9 +715,9 @@
           y: (pts[0].clientY + pts[1].clientY) / 2
         };
 
-        panX = initialPanXOnPinch + (currentCenter.x - pinchCenter.x);
-        panY = initialPanYOnPinch + (currentCenter.y - pinchCenter.y);
         zoomScale = newZoom;
+        panX = initialPanXOnPinch + (currentCenter.x - pinchCenter.x) + (pinchedLocalCenter ? (pinchedLocalCenter.x * initialZoomOnPinch - pinchedLocalCenter.x * zoomScale) : 0);
+        panY = initialPanYOnPinch + (currentCenter.y - pinchCenter.y) + (pinchedLocalCenter ? (pinchedLocalCenter.y * initialZoomOnPinch - pinchedLocalCenter.y * zoomScale) : 0);
 
         updateTransform();
         return;
@@ -729,6 +736,7 @@
 
       if (activePointers.size < 2) {
         initialPinchDist = null;
+        pinchedLocalCenter = null;
       }
       if (activePointers.size === 0) {
         isPanning = false;

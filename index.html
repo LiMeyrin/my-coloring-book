@@ -403,7 +403,7 @@
       ];
     }
 
-    // Алгоритм Flood Fill (Заливка)
+    // Умная заливка с детекцией линй и контуров
     function floodFill(startX, startY, fillColorHex) {
       const canvas = document.getElementById('paint-canvas');
       const width = canvas.width;
@@ -414,32 +414,20 @@
       const imgData = ctx.getImageData(0, 0, width, height);
       const data = imgData.data;
 
-      const targetPos = (startY * width + startX) * 4;
-      const targetR = data[targetPos];
-      const targetG = data[targetPos + 1];
-      const targetB = data[targetPos + 2];
-      const targetA = data[targetPos + 3];
-
       const fillRgb = hexToRgba(fillColorHex);
 
-      // Если цвет совпадает, не заливаем
-      if (Math.abs(targetR - fillRgb[0]) < 10 &&
-          Math.abs(targetG - fillRgb[1]) < 10 &&
-          Math.abs(targetB - fillRgb[2]) < 10) return;
-
-      const tolerance = 60; // Допуск по цвету для красивого прилегания к контурам
-
-      function matchColor(pos) {
+      function isBorder(pos) {
         const r = data[pos];
         const g = data[pos + 1];
         const b = data[pos + 2];
         const a = data[pos + 3];
 
-        return Math.abs(r - targetR) <= tolerance &&
-               Math.abs(g - targetG) <= tolerance &&
-               Math.abs(b - targetB) <= tolerance &&
-               Math.abs(a - targetA) <= tolerance;
+        const brightness = (r + g + b) / 3;
+        return brightness < 120 || a < 50; 
       }
+
+      const startPos = (startY * width + startX) * 4;
+      if (isBorder(startPos)) return;
 
       const pixelStack = [[startX, startY]];
 
@@ -450,7 +438,7 @@
 
         let pixelPos = (y * width + x) * 4;
 
-        while (y >= 0 && matchColor(pixelPos)) {
+        while (y >= 0 && !isBorder(pixelPos)) {
           y--;
           pixelPos -= width * 4;
         }
@@ -461,14 +449,22 @@
         let reachLeft = false;
         let reachRight = false;
 
-        while (y < height && matchColor(pixelPos)) {
+        while (y < height && !isBorder(pixelPos)) {
+          if (data[pixelPos] === fillRgb[0] && 
+              data[pixelPos + 1] === fillRgb[1] && 
+              data[pixelPos + 2] === fillRgb[2]) {
+            y++;
+            pixelPos += width * 4;
+            continue;
+          }
+
           data[pixelPos] = fillRgb[0];
           data[pixelPos + 1] = fillRgb[1];
           data[pixelPos + 2] = fillRgb[2];
           data[pixelPos + 3] = 255;
 
           if (x > 0) {
-            if (matchColor(pixelPos - 4)) {
+            if (!isBorder(pixelPos - 4)) {
               if (!reachLeft) {
                 pixelStack.push([x - 1, y]);
                 reachLeft = true;
@@ -479,7 +475,7 @@
           }
 
           if (x < width - 1) {
-            if (matchColor(pixelPos + 4)) {
+            if (!isBorder(pixelPos + 4)) {
               if (!reachRight) {
                 pixelStack.push([x + 1, y]);
                 reachRight = true;
@@ -699,8 +695,9 @@
     }
 
     function changeScale(scale) {
-      document.getElementById('pages-grid').style.transform = `scale(${scale})`;
-      document.getElementById('pages-grid').style.transformOrigin = 'top left';
+      const grid = document.getElementById('pages-grid');
+      grid.style.transform = `scale(${scale})`;
+      grid.style.transformOrigin = 'top left';
     }
   </script>
 </body>

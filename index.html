@@ -134,6 +134,27 @@
       touch-action: none;
       display: block;
     }
+    
+    canvas.eyedropper-active {
+      cursor: crosshair !important;
+    }
+
+    /* Уведомление о режиме пипетки */
+    #eyedropper-banner {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(108, 92, 231, 0.9);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      pointer-events: none;
+      z-index: 10;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    }
 
     @media (max-width: 768px) {
       #editor-view { flex-direction: column; }
@@ -177,12 +198,12 @@
   <div id="color-modal" class="modal hidden">
     <div class="palette-card">
       <h3>Выбор цвета</h3>
-      <button class="btn" style="width: 100%;" onclick="activateEyedropper()">🔍 Включить пипетку</button>
+      <button class="btn" style="width: 100%;" onclick="activateCanvasEyedropper()">🔍 Пипетка (кликни на рисунок)</button>
       
-      <label style="align-self: flex-start; font-size: 13px; font-weight: 600;">Свой цвет:</label>
+      <label style="align-self: flex-start; font-size: 13px; font-weight: 600;">Выбрать свой цвет:</label>
       <input type="color" id="native-color-picker" style="width: 100%; height: 45px; border-radius: 8px; border: none; cursor: pointer;" onchange="setColor(this.value)">
 
-      <label style="align-self: flex-start; font-size: 13px; font-weight: 600;">Готовые палитры:</label>
+      <label style="align-self: flex-start; font-size: 13px; font-weight: 600;">Готовая палитра:</label>
       <div class="preset-colors">
         <div class="color-swatch" style="background: #000000" onclick="setColor('#000000')"></div>
         <div class="color-swatch" style="background: #ffffff; border-color: #ccc" onclick="setColor('#ffffff')"></div>
@@ -246,6 +267,7 @@
     </div>
     
     <div class="canvas-wrapper" id="canvas-wrapper">
+      <div id="eyedropper-banner" class="hidden">🔍 Коснитесь картинки, чтобы взять цвет</div>
       <div id="canvas-container">
         <canvas id="paint-canvas"></canvas>
       </div>
@@ -259,6 +281,7 @@
     let currentBook = null;
     let currentPageIndex = null;
     let isDrawing = false;
+    let isEyedropperActive = false;
     let ctx;
     let lastX = 0, lastY = 0;
     let lastTime = 0;
@@ -312,17 +335,28 @@
       closeColorModal();
     }
 
-    async function activateEyedropper() {
+    function activateCanvasEyedropper() {
       closeColorModal();
-      if ('EyeDropper' in window) {
-        const eyeDropper = new EyeDropper();
-        try {
-          const result = await eyeDropper.open();
-          setColor(result.sRGBHex);
-        } catch (e) { console.log("Отмена выбора пипеткой"); }
-      } else {
-        alert("Пипетка не поддерживается вашей версией браузера.");
-      }
+      isEyedropperActive = true;
+      document.getElementById('eyedropper-banner').classList.remove('hidden');
+      document.getElementById('paint-canvas').classList.add('eyedropper-active');
+    }
+
+    function pickColorFromCanvas(x, y) {
+      const canvas = document.getElementById('paint-canvas');
+      if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) return;
+      
+      const pixel = ctx.getImageData(x, y, 1, 1).data;
+      const r = pixel[0].toString(16).padStart(2, '0');
+      const g = pixel[1].toString(16).padStart(2, '0');
+      const b = pixel[2].toString(16).padStart(2, '0');
+      
+      const pickedHex = `#${r}${g}${b}`;
+      setColor(pickedHex);
+
+      isEyedropperActive = false;
+      document.getElementById('eyedropper-banner').classList.add('hidden');
+      document.getElementById('paint-canvas').classList.remove('eyedropper-active');
     }
 
     async function uploadPDF(event) {
@@ -459,7 +493,7 @@
       showView('editor-view');
       const canvas = document.getElementById('paint-canvas');
       const wrapper = document.getElementById('canvas-wrapper');
-      ctx = canvas.getContext('2d');
+      ctx = canvas.getContext('2d', { willReadFrequently: true });
       const page = currentBook.pages[currentPageIndex];
 
       document.getElementById('brush-type').value = 'none';
@@ -501,6 +535,13 @@
     function handlePointerDown(e) {
       activePointers.set(e.pointerId, e);
 
+      const coords = getCoords(e);
+
+      if (isEyedropperActive) {
+        pickColorFromCanvas(coords.x, coords.y);
+        return;
+      }
+
       const brushType = document.getElementById('brush-type').value;
 
       if (activePointers.size >= 2) {
@@ -517,7 +558,6 @@
         startPanX = e.clientX - panX;
         startPanY = e.clientY - panY;
       } else {
-        const coords = getCoords(e);
         if (brushType === 'fill') {
           floodFill(coords.x, coords.y, currentColor);
           return;

@@ -13,17 +13,14 @@
       --primary-hover: #5a4bcf;
     }
     * { 
-      touch-action: none;
       box-sizing: border-box; 
-      -webkit-touch-callout: none;
-      -webkit-user-select: none;
-      user-select: none;
     }
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       margin: 0; padding: 15px;
       background-color: var(--bg-color);
       color: #333;
+      overflow-y: auto; /* Возвращаем скролл для основного экрана */
     }
     .hidden { display: none !important; }
     header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
@@ -65,8 +62,13 @@
       flex-direction: row; 
       gap: 15px; 
       height: calc(100vh - 30px); 
+      overflow: hidden; /* Закрепляем редактор, чтобы скроллился только холст/панель */
     }
     
+    #editor-view * {
+      touch-action: none; /* Отключаем жесты браузера только внутри редактора */
+    }
+
     .toolbar {
       width: 230px; background: white; padding: 12px; border-radius: 12px;
       display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);

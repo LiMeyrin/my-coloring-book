@@ -20,7 +20,7 @@
       margin: 0; padding: 15px;
       background-color: var(--bg-color);
       color: #333;
-      overflow-y: auto; /* Возвращаем скролл для основного экрана */
+      overflow-y: auto;
     }
     .hidden { display: none !important; }
     header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
@@ -62,11 +62,11 @@
       flex-direction: row; 
       gap: 15px; 
       height: calc(100vh - 30px); 
-      overflow: hidden; /* Закрепляем редактор, чтобы скроллился только холст/панель */
+      overflow: hidden;
     }
     
     #editor-view * {
-      touch-action: none; /* Отключаем жесты браузера только внутри редактора */
+      touch-action: none;
     }
 
     .toolbar {
@@ -281,7 +281,8 @@
     let isDrawing = false;
     let isEyedropperActive = false;
     let ctx;
-    let lastX = 0, lastY = 0;
+    
+    let points = []; // Массив точек для сглаживания линии
     let lastTime = 0;
     let currentLineWidth = 10;
     let currentColor = '#ff0000';
@@ -560,8 +561,7 @@
         }
 
         isDrawing = true;
-        lastX = coords.x;
-        lastY = coords.y;
+        points = [{ x: coords.x, y: coords.y }];
         lastTime = Date.now();
         currentLineWidth = parseInt(document.getElementById('brush-size').value);
         draw(e);
@@ -728,49 +728,18 @@
 
     function endStroke(e) {
       if (!isDrawing) return;
-      const type = document.getElementById('brush-type').value;
-
-      if (type === 'tapered' || type === 'japanese') {
-        let fadeSteps = 5;
-        let fadeWidth = currentLineWidth;
-        let stepX = (lastX - (lastX - 2)) / fadeSteps;
-        let stepY = (lastY - (lastY - 2)) / fadeSteps;
-
-        const fadeInterval = setInterval(() => {
-          if (fadeSteps <= 0 || fadeWidth <= 0.5) {
-            clearInterval(fadeInterval);
-            isDrawing = false;
-            if (ctx) ctx.beginPath();
-            saveStateToHistory(); 
-            return;
-          }
-
-          ctx.beginPath();
-          ctx.strokeStyle = currentColor;
-          ctx.lineWidth = fadeWidth;
-          ctx.lineCap = 'round';
-          ctx.moveTo(lastX, lastY);
-          
-          lastX += stepX;
-          lastY += stepY;
-          ctx.lineTo(lastX, lastY);
-          ctx.stroke();
-
-          fadeWidth *= 0.6;
-          fadeSteps--;
-        }, 10);
-      } else {
-        isDrawing = false;
-        if (ctx) ctx.beginPath();
-        saveStateToHistory(); 
-      }
+      isDrawing = false;
+      points = [];
+      saveStateToHistory(); 
     }
 
     function draw(e) {
       if (!isDrawing) return;
       const coords = getCoords(e);
-      const x = coords.x;
-      const y = coords.y;
+      points.push({ x: coords.x, y: coords.y });
+
+      // Нужны минимум 3 точки для уверенной кривой Безье
+      if (points.length < 3) return;
 
       let baseSize = parseInt(document.getElementById('brush-size').value);
       
@@ -782,44 +751,45 @@
 
       ctx.strokeStyle = currentColor;
       ctx.fillStyle = currentColor;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
 
-      if (type === 'tapered') {
+      // Вычисляем среднюю точку между предыдущей и текущей для сглаживания
+      const xc = (points[points.length - 2].x + points[points.length - 1].x) / 2;
+      const yc = (points[points.length - 2].y + points[points.length - 1].y) / 2;
+
+      if (type === 'tapered' || type === 'japanese') {
         const now = Date.now();
-        const dist = Math.hypot(x - lastX, y - lastY);
+        const dist = Math.hypot(coords.x - points[points.length - 2].x, coords.y - points[points.length - 2].y);
         const time = Math.max(1, now - lastTime);
         const speed = dist / time;
 
         const targetWidth = Math.max(1, baseSize - speed * 1.5);
         currentLineWidth = currentLineWidth * 0.7 + targetWidth * 0.3;
-
         ctx.lineWidth = currentLineWidth;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
         ctx.shadowBlur = 0;
+
         ctx.beginPath();
-        ctx.moveTo(lastX, lastY);
-        ctx.lineTo(x, y);
+        ctx.moveTo(points[points.length - 3].x, points[points.length - 3].y);
+        ctx.quadraticCurveTo(points[points.length - 2].x, points[points.length - 2].y, xc, yc);
         ctx.stroke();
         lastTime = now;
 
       } else if (type === 'round') {
         ctx.lineWidth = baseSize;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
         ctx.shadowBlur = 0;
         ctx.beginPath();
-        ctx.moveTo(lastX, lastY);
-        ctx.lineTo(x, y);
+        ctx.moveTo(points[points.length - 3].x, points[points.length - 3].y);
+        ctx.quadraticCurveTo(points[points.length - 2].x, points[points.length - 2].y, xc, yc);
         ctx.stroke();
 
       } else if (type === 'pencil') {
         ctx.lineWidth = Math.max(1, baseSize * 0.5);
-        ctx.lineCap = 'round';
         ctx.globalAlpha = 0.4;
         ctx.shadowBlur = 0;
         ctx.beginPath();
-        ctx.moveTo(lastX, lastY);
-        ctx.lineTo(x, y);
+        ctx.moveTo(points[points.length - 3].x, points[points.length - 3].y);
+        ctx.quadraticCurveTo(points[points.length - 2].x, points[points.length - 2].y, xc, yc);
         ctx.stroke();
         ctx.globalAlpha = 1.0;
 
@@ -828,36 +798,18 @@
         ctx.lineCap = 'square';
         ctx.shadowBlur = 0;
         ctx.beginPath();
-        ctx.moveTo(lastX, lastY);
-        ctx.lineTo(x, y);
+        ctx.moveTo(points[points.length - 3].x, points[points.length - 3].y);
+        ctx.quadraticCurveTo(points[points.length - 2].x, points[points.length - 2].y, xc, yc);
         ctx.stroke();
-
-      } else if (type === 'japanese') {
-        const now = Date.now();
-        const dist = Math.hypot(x - lastX, y - lastY);
-        const time = Math.max(1, now - lastTime);
-        const speed = dist / time;
-        
-        currentLineWidth = Math.max(2, baseSize - speed * 3);
-        ctx.lineWidth = currentLineWidth;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.shadowBlur = 0;
-        ctx.beginPath();
-        ctx.moveTo(lastX, lastY);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-        lastTime = now;
 
       } else if (type === 'soft') {
         ctx.lineWidth = baseSize;
-        ctx.lineCap = 'round';
         ctx.globalAlpha = 0.2;
         ctx.shadowColor = currentColor;
         ctx.shadowBlur = baseSize / 2;
         ctx.beginPath();
-        ctx.moveTo(lastX, lastY);
-        ctx.lineTo(x, y);
+        ctx.moveTo(points[points.length - 3].x, points[points.length - 3].y);
+        ctx.quadraticCurveTo(points[points.length - 2].x, points[points.length - 2].y, xc, yc);
         ctx.stroke();
         ctx.globalAlpha = 1.0;
         ctx.shadowBlur = 0;
@@ -869,13 +821,13 @@
           const offsetX = (Math.random() - 0.5) * baseSize * 2;
           const offsetY = (Math.random() - 0.5) * baseSize * 2;
           if (Math.hypot(offsetX, offsetY) <= baseSize) {
-            ctx.fillRect(x + offsetX, y + offsetY, 1, 1);
+            ctx.fillRect(coords.x + offsetX, coords.y + offsetY, 1, 1);
           }
         }
       }
 
-      lastX = x;
-      lastY = y;
+      // Оставляем последние 2 точки для построения следующего сегмента
+      points.shift();
     }
 
     function saveDrawing() {

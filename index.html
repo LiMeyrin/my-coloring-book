@@ -317,7 +317,7 @@
       <input type="range" id="brush-size" min="1" max="60" value="10" oninput="document.getElementById('brush-size-val').innerText = this.value">
 
       <label>🔍 Масштаб: <span id="zoom-val">100</span>%</label>
-      <input type="range" id="editor-zoom" min="50" max="1000" value="100" oninput="setCanvasZoom(this.value / 100)">
+      <input type="range" id="editor-zoom" min="50" max="2000" value="100" oninput="setCanvasZoom(this.value / 100)">
 
       <button class="btn btn-secondary" onclick="undoStroke()">⎌ Отменить</button>
       
@@ -636,7 +636,7 @@
     }
 
     function setCanvasZoom(newScale) {
-      zoomScale = Math.max(0.5, Math.min(10, newScale));
+      zoomScale = Math.max(0.5, Math.min(20, newScale));
       updateTransform();
     }
 
@@ -701,7 +701,7 @@
         const currentDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
         const scaleChange = currentDist / initialPinchDist;
         
-        const newZoom = Math.max(0.5, Math.min(10, initialZoomOnPinch * scaleChange));
+        const newZoom = Math.max(0.5, Math.min(20, initialZoomOnPinch * scaleChange));
         
         const currentCenter = {
           x: (pts[0].clientX + pts[1].clientX) / 2,

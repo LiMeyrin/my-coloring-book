@@ -531,7 +531,6 @@
     }
 
     function handlePointerDown(e) {
-      // Рисуем и выбираем пипеткой ТОЛЬКО стилусом (pen)
       if (e.pointerType === 'pen') {
         activePointers.set(e.pointerId, e);
         const coords = getCoords(e);
@@ -552,7 +551,6 @@
         return;
       }
 
-      // Пальцы (touch) используются исключительно для перемещения и зума
       if (e.pointerType === 'touch') {
         activePointers.set(e.pointerId, e);
 
@@ -581,7 +579,6 @@
         activePointers.set(e.pointerId, e);
       }
 
-      // Обработка рисования стилусом
       if (e.pointerType === 'pen' && isDrawing) {
         const coords = getCoords(e);
         strokePoints.push({ x: coords.x, y: coords.y, pressure: e.pressure || 0.5 });
@@ -589,7 +586,6 @@
         return;
       }
 
-      // Масштабирование двумя пальцами (pinch-to-zoom)
       if (activePointers.size >= 2 && initialPinchDist) {
         const pts = Array.from(activePointers.values());
         const currentDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
@@ -610,7 +606,6 @@
         return;
       }
 
-      // Перемещение холста одним пальцем (если кисть не выбрана или режим панорамирования)
       if (isPanning && activePointers.size === 1 && e.pointerType === 'touch') {
         panX = e.clientX - startPanX;
         panY = e.clientY - startPanY;
@@ -793,10 +788,11 @@
         let widthFactor = 1;
 
         if (type === 'tapered' || type === 'japanese') {
-          if (progress < 0.15) {
-            widthFactor = progress / 0.15;
-          } else if (progress > 0.85) {
-            widthFactor = (1 - progress) / 0.15;
+          // Смягченный коэффициент: линия начинает прорисовываться быстрее и без пропусков на старте
+          if (progress < 0.08) {
+            widthFactor = 0.3 + (progress / 0.08) * 0.7;
+          } else if (progress > 0.92) {
+            widthFactor = (1 - progress) / 0.08;
           }
         }
 

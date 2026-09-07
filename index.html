@@ -1,360 +1,707 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Мои Раскраски</title>
-    <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Мои Раскраски</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    :root {
+      --bg-color: #f7f9fc;
+      --card-bg: #ffffff;
+      --primary: #6c5ce7;
+      --primary-hover: #5a4bcf;
+    }
+    * { touch-action: manipulation; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0; padding: 15px;
+      background-color: var(--bg-color);
+      color: #333;
+    }
+    .hidden { display: none !important; }
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
+    
+    /* Кнопки */
+    .btn {
+      background: var(--primary); color: white; border: none;
+      padding: 10px 16px; border-radius: 8px; cursor: pointer;
+      font-weight: 600; transition: background 0.2s; font-size: 14px;
+    }
+    .btn:hover { background: var(--primary-hover); }
+    .btn:disabled { background: #b2bec3; cursor: not-allowed; }
+    .btn-secondary { background: #b2bec3; }
+    .btn-danger { background: #ff7675; }
 
-        body {
-            background-color: #f4f6f9;
-            color: #333;
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-        }
+    /* Сетки */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 15px;
+    }
+    .card {
+      background: var(--card-bg); border-radius: 12px; padding: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05); text-align: center;
+      cursor: pointer; transition: transform 0.2s;
+    }
+    .card:hover { transform: translateY(-3px); }
+    .card img { width: 100%; height: 160px; object-fit: cover; border-radius: 8px; }
 
-        header {
-            background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
-            color: white;
-            padding: 1rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-        }
+    /* Модалка страницы */
+    .modal {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.8); display: flex;
+      flex-direction: column; justify-content: center; align-items: center; z-index: 100;
+      padding: 15px;
+    }
+    .modal img { max-width: 90vw; max-height: 65vh; border-radius: 8px; background: white; object-fit: contain; }
+    .modal-actions { margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 
-        header h1 {
-            font-size: 1.5rem;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
+    /* Редактор адаптивный */
+    #editor-view { 
+      display: flex; 
+      flex-direction: row; 
+      gap: 15px; 
+      height: calc(100vh - 30px); 
+    }
+    
+    .toolbar {
+      width: 230px; background: white; padding: 12px; border-radius: 12px;
+      display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      overflow-y: auto; flex-shrink: 0;
+    }
+    .toolbar label { font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; }
+    .toolbar select, .toolbar input[type="range"] { width: 100%; margin-top: 4px; }
+    
+    .canvas-wrapper { 
+      flex: 1; 
+      display: flex; 
+      justify-content: center; 
+      align-items: flex-start; 
+      overflow: auto; 
+      background: #eef2f5; 
+      border-radius: 12px; 
+      padding: 20px; 
+      position: relative;
+    }
+    
+    canvas { 
+      background: white; 
+      border-radius: 8px; 
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
+      touch-action: none; 
+      transform-origin: top left;
+    }
 
-        .main-container {
-            display: flex;
-            flex: 1;
-            padding: 20px;
-            gap: 20px;
-            max-width: 1400px;
-            margin: 0 auto;
-            width: 100%;
-        }
-
-        .sidebar {
-            width: 280px;
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        .tool-group {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .tool-group label {
-            font-weight: 600;
-            font-size: 0.9rem;
-            color: #555;
-        }
-
-        .color-picker-wrapper {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        input[type="color"] {
-            -webkit-appearance: none;
-            border: none;
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            cursor: pointer;
-        }
-
-        input[type="color"]::-webkit-color-swatch-wrapper {
-            padding: 0;
-        }
-
-        input[type="color"]::-webkit-color-swatch {
-            border: 2px solid #ddd;
-            border-radius: 50%;
-        }
-
-        .btn {
-            background-color: #2575fc;
-            color: white;
-            border: none;
-            padding: 10px 15px;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-        }
-
-        .btn:hover {
-            background-color: #1a5cd8;
-            transform: translateY(-1px);
-        }
-
-        .btn-danger {
-            background-color: #ff4757;
-        }
-
-        .btn-danger:hover {
-            background-color: #e03242;
-        }
-
-        .btn-success {
-            background-color: #2ed573;
-        }
-
-        .btn-success:hover {
-            background-color: #26af5f;
-        }
-
-        .canvas-area {
-            flex: 1;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-            position: relative;
-        }
-
-        canvas {
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            cursor: crosshair;
-            background-color: #ffffff;
-            max-width: 100%;
-            max-height: 70vh;
-            touch-action: none;
-        }
-
-        .gallery-section {
-            background: white;
-            margin: 20px;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-        }
-
-        .gallery-section h2 {
-            margin-bottom: 15px;
-            font-size: 1.2rem;
-            color: #444;
-        }
-
-        .gallery-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-            gap: 15px;
-        }
-
-        .gallery-card {
-            border: 1px solid #eee;
-            border-radius: 8px;
-            overflow: hidden;
-            background: #fafafa;
-            position: relative;
-            transition: transform 0.2s;
-        }
-
-        .gallery-card:hover {
-            transform: scale(1.03);
-        }
-
-        .gallery-card img {
-            width: 100%;
-            height: 140px;
-            object-fit: contain;
-            background: white;
-        }
-
-        .gallery-card-actions {
-            padding: 8px;
-            display: flex;
-            justify-content: space-between;
-            background: white;
-            border-top: 1px solid #eee;
-        }
-
-        .gallery-card-actions button {
-            padding: 4px 8px;
-            font-size: 0.8rem;
-        }
-    </style>
+    @media (max-width: 768px) {
+      #editor-view { flex-direction: column; }
+      .toolbar { width: 100%; max-height: 240px; }
+    }
+  </style>
 </head>
 <body>
 
+  <div id="main-view">
     <header>
-        <h1>🎨 Мои Раскраски</h1>
+      <h1>🎨 Мои Раскраски</h1>
+      <button class="btn" id="upload-btn" onclick="document.getElementById('pdf-upload').click()">+ Загрузить PDF</button>
+      <input type="file" id="pdf-upload" accept="application/pdf" class="hidden" onchange="uploadPDF(event)">
     </header>
+    <div id="pdf-grid" class="grid"></div>
+  </div>
 
-    <div class="main-container">
-        <div class="sidebar">
-            <div class="tool-group">
-                <label for="colorPicker">Цвет кисти:</label>
-                <div class="color-picker-wrapper">
-                    <input type="color" id="colorPicker" value="#2575fc">
-                </div>
-            </div>
+  <div id="book-view" class="hidden">
+    <header>
+      <button class="btn btn-secondary" onclick="showView('main-view')">← К списку</button>
+      <h2 id="book-title">Название книги</h2>
+      <div>
+        Масштаб: 
+        <select id="scale-select" onchange="changeScale(this.value)">
+          <option value="1">100%</option>
+          <option value="1.3">130%</option>
+          <option value="1.6">160%</option>
+        </select>
+      </div>
+    </header>
+    <div id="pages-grid" class="grid"></div>
+  </div>
 
-            <div class="tool-group">
-                <label for="brushSize">Размер кисти: <span id="brushSizeVal">5</span>px</label>
-                <input type="range" id="brushSize" min="1" max="50" value="5">
-            </div>
+  <div id="page-modal" class="modal hidden">
+    <img id="modal-img" src="" alt="Страница">
+    <div class="modal-actions" id="modal-actions"></div>
+  </div>
 
-            <button class="btn btn-danger" id="clearBtn">🧹 Очистить холст</button>
-            <button class="btn btn-success" id="saveLocalBtn">💾 Сохранить рисунок</button>
-        </div>
+  <div id="editor-view" class="hidden">
+    <div class="toolbar">
+      <h3>Инструменты</h3>
+      
+      <label>Инструмент:</label>
+      <select id="brush-type">
+        <option value="fill">🪣 Заливка</option>
+        <option value="tapered">✨ Плавная (Острый кончик)</option>
+        <option value="round">⚪ Круглая кисть</option>
+        <option value="pencil">✏️ Карандаш</option>
+        <option value="chisel">✒️ Косая кисть / Маркер</option>
+        <option value="japanese">🖌️ Японская тушь</option>
+        <option value="soft">☁️ Акварель / Мягкая</option>
+        <option value="spray">💨 Аэрограф / Спрей</option>
+      </select>
 
-        <div class="canvas-area">
-            <canvas id="paintCanvas" width="800" height="600"></canvas>
-        </div>
+      <label>Цвет:</label>
+      <input type="color" id="color-picker" value="#ff0000">
+
+      <label>Размер: <span id="brush-size-val">10</span>px</label>
+      <input type="range" id="brush-size" min="1" max="60" value="10" oninput="document.getElementById('brush-size-val').innerText = this.value">
+
+      <label>🔍 Приближение: <span id="zoom-val">100</span>%</label>
+      <input type="range" id="editor-zoom" min="50" max="300" value="100" oninput="setCanvasZoom(this.value)">
+
+      <button class="btn btn-secondary" onclick="activateEyedropper()">🔍 Пипетка</button>
+      <button class="btn btn-secondary" onclick="undoStroke()">⎌ Отменить</button>
+      
+      <hr style="width:100%; border: 0.5px solid #eee; margin: 5px 0;">
+      
+      <button class="btn" onclick="saveDrawing()">💾 Сохранить</button>
+      <button class="btn btn-secondary" onclick="closeEditor()">← Назад</button>
     </div>
-
-    <div class="gallery-section">
-        <h2>📁 Сохранённые работы (Локально)</h2>
-        <div class="gallery-grid" id="galleryGrid">
-            <!-- Сохраненные рисунки появятся здесь -->
-        </div>
+    
+    <div class="canvas-wrapper" id="canvas-wrapper">
+      <canvas id="paint-canvas"></canvas>
     </div>
+  </div>
 
-    <script>
-        const canvas = document.getElementById('paintCanvas');
-        const ctx = canvas.getContext('2d');
-        const colorPicker = document.getElementById('colorPicker');
-        const brushSize = document.getElementById('brushSize');
-        const brushSizeVal = document.getElementById('brushSizeVal');
-        const clearBtn = document.getElementById('clearBtn');
-        const saveLocalBtn = document.getElementById('saveLocalBtn');
-        const galleryGrid = document.getElementById('galleryGrid');
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-        let isDrawing = false;
+    let db;
+    let currentBook = null;
+    let currentPageIndex = null;
+    let isDrawing = false;
+    let ctx;
+    let lastX = 0, lastY = 0;
+    let lastTime = 0;
+    let currentZoom = 1;
+    let currentLineWidth = 10;
+    
+    let undoHistory = [];
+    const MAX_UNDO_STEPS = 20;
 
-        // Заполнение белым фоном по умолчанию
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const request = indexedDB.open("ColoringAppDB", 1);
+    request.onupgradeneeded = (e) => {
+      db = e.target.result;
+      if (!db.objectStoreNames.contains("books")) {
+        db.createObjectStore("books", { keyPath: "id", autoIncrement: true });
+      }
+    };
+    request.onsuccess = (e) => {
+      db = e.target.result;
+      loadBooks();
+    };
 
-        // Изменение размера кисти в интерфейсе
-        brushSize.addEventListener('input', (e) => {
-            brushSizeVal.textContent = e.target.value;
+    function showView(viewId) {
+      document.querySelectorAll('#main-view, #book-view, #editor-view').forEach(v => v.classList.add('hidden'));
+      document.getElementById(viewId).classList.remove('hidden');
+    }
+
+    async function uploadPDF(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const btn = document.getElementById('upload-btn');
+      const originalBtnText = btn.innerText;
+      btn.innerText = 'Загрузка...';
+      btn.disabled = true;
+
+      try {
+        const title = prompt("Введите название раскраски:", file.name.replace(/\.pdf$/i, '')) || "Без названия";
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        
+        const pages = [];
+        for (let i = 1; i <= pdf.numPages; i++) {
+          btn.innerText = `Обработка: ${i}/${pdf.numPages}`;
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: 1.2 });
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+          
+          await page.render({ canvasContext: context, viewport: viewport }).promise;
+          pages.push({ original: canvas.toDataURL('image/jpeg', 0.8), progress: null });
+        }
+
+        if (pages.length === 0) return;
+
+        const book = { title, cover: pages[0].original, pages };
+        const tx = db.transaction("books", "readwrite");
+        const store = tx.objectStore("books");
+        
+        const addRequest = store.add(book);
+        addRequest.onsuccess = () => loadBooks();
+
+      } catch (err) {
+        console.error("Ошибка обработки PDF:", err);
+        alert("Произошла ошибка при чтении файла PDF.");
+      } finally {
+        btn.innerText = originalBtnText;
+        btn.disabled = false;
+        event.target.value = '';
+      }
+    }
+
+    function loadBooks() {
+      if (!db) return;
+      const tx = db.transaction("books", "readonly");
+      const store = tx.objectStore("books");
+      const req = store.getAll();
+      req.onsuccess = () => {
+        const grid = document.getElementById('pdf-grid');
+        grid.innerHTML = '';
+        req.result.forEach(book => {
+          const card = document.createElement('div');
+          card.className = 'card';
+          card.innerHTML = `<img src="${book.cover}"><h3>${book.title}</h3>`;
+          card.onclick = () => openBook(book);
+          grid.appendChild(card);
         });
+      };
+    }
 
-        // Рисование
-        function startDrawing(e) {
-            isDrawing = true;
-            draw(e);
-        }
+    function openBook(book) {
+      currentBook = book;
+      document.getElementById('book-title').innerText = book.title;
+      renderPagesGrid();
+      showView('book-view');
+    }
 
-        function stopDrawing() {
-            isDrawing = false;
-            ctx.beginPath();
-        }
+    function renderPagesGrid() {
+      const grid = document.getElementById('pages-grid');
+      grid.innerHTML = '';
+      currentBook.pages.forEach((page, index) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        const imgSrc = page.progress || page.original;
+        card.innerHTML = `<img src="${imgSrc}"><p>Страница ${index + 1}</p>`;
+        card.onclick = () => openModal(index);
+        grid.appendChild(card);
+      });
+    }
 
-        function draw(e) {
-            if (!isDrawing) return;
+    function openModal(index) {
+      currentPageIndex = index;
+      const page = currentBook.pages[index];
+      const modal = document.getElementById('page-modal');
+      const img = document.getElementById('modal-img');
+      const actions = document.getElementById('modal-actions');
+      
+      img.src = page.progress || page.original;
+      actions.innerHTML = '';
 
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
+      const btnBack = document.createElement('button');
+      btnBack.className = 'btn btn-secondary';
+      btnBack.innerText = 'Назад';
+      btnBack.onclick = () => modal.classList.add('hidden');
+      actions.appendChild(btnBack);
 
-            const x = ((e.clientX || e.touches[0].clientX) - rect.left) * scaleX;
-            const y = ((e.clientY || e.touches[0].clientY) - rect.top) * scaleY;
-
-            ctx.lineWidth = brushSize.value;
-            ctx.lineCap = 'round';
-            ctx.strokeStyle = colorPicker.value;
-
-            ctx.lineTo(x, y);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(x, y);
-        }
-
-        canvas.addEventListener('mousedown', startDrawing);
-        canvas.addEventListener('mousemove', draw);
-        canvas.addEventListener('mouseup', stopDrawing);
-        canvas.addEventListener('mouseleave', stopDrawing);
-
-        // Поддержка сенсорных экранов (телефоны/планшеты)
-        canvas.addEventListener('touchstart', startDrawing);
-        canvas.addEventListener('touchmove', draw);
-        canvas.addEventListener('touchend', stopDrawing);
-
-        // Очистка холста
-        clearBtn.addEventListener('click', () => {
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-        });
-
-        // Сохранение в локальное хранилище
-        saveLocalBtn.addEventListener('click', () => {
-            const dataUrl = canvas.toDataURL('image/png');
-            let savedImages = JSON.parse(localStorage.getItem('my_colorings') || '[]');
-            savedImages.unshift(dataUrl); // добавляем в начало
-            localStorage.setItem('my_colorings', JSON.stringify(savedImages));
-            renderGallery();
-            alert('Рисунок сохранён!');
-        });
-
-        // Отображение галереи
-        function renderGallery() {
-            galleryGrid.innerHTML = '';
-            let savedImages = JSON.parse(localStorage.getItem('my_colorings') || '[]');
-
-            if (savedImages.length === 0) {
-                galleryGrid.innerHTML = '<p style="color:#888; grid-column: 1/-1;">Пока нет сохранённых рисунков.</p>';
-                return;
-            }
-
-            savedImages.forEach((imgData, index) => {
-                const card = document.createElement('div');
-                card.className = 'gallery-card';
-
-                card.innerHTML = `
-                    <img src="${imgData}" alt="Рисунок ${index + 1}">
-                    <div class="gallery-card-actions">
-                        <a href="${imgData}" download="coloring-${index + 1}.png" class="btn btn-success" style="text-decoration:none; font-size:11px;">Скачать</a>
-                        <button class="btn btn-danger" onclick="deleteImage(${index})">Удалить</button>
-                    </div>
-                `;
-                galleryGrid.appendChild(card);
-            });
-        }
-
-        // Удаление рисунка
-        window.deleteImage = function(index) {
-            let savedImages = JSON.parse(localStorage.getItem('my_colorings') || '[]');
-            savedImages.splice(index, 1);
-            localStorage.setItem('my_colorings', JSON.stringify(savedImages));
-            renderGallery();
+      if (!page.progress) {
+        const btnDraw = document.createElement('button');
+        btnDraw.className = 'btn';
+        btnDraw.innerText = 'Рисовать';
+        btnDraw.onclick = () => { modal.classList.add('hidden'); startDrawing(); };
+        actions.appendChild(btnDraw);
+      } else {
+        const btnContinue = document.createElement('button');
+        btnContinue.className = 'btn';
+        btnContinue.innerText = 'Продолжить';
+        btnContinue.onclick = () => { modal.classList.add('hidden'); startDrawing(); };
+        
+        const btnReset = document.createElement('button');
+        btnReset.className = 'btn btn-danger';
+        btnReset.innerText = 'Начать заново';
+        btnReset.onclick = () => {
+          page.progress = null;
+          saveBookToDB();
+          openModal(index);
+          renderPagesGrid();
         };
 
-        // Загрузка галереи при старте
-        renderGallery();
-    </script>
+        actions.appendChild(btnContinue);
+        actions.appendChild(btnReset);
+      }
+
+      modal.classList.remove('hidden');
+    }
+
+    function startDrawing() {
+      showView('editor-view');
+      const canvas = document.getElementById('paint-canvas');
+      ctx = canvas.getContext('2d');
+      const page = currentBook.pages[currentPageIndex];
+
+      document.getElementById('editor-zoom').value = 100;
+      setCanvasZoom(100);
+      undoHistory = []; 
+
+      const img = new Image();
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        saveStateToHistory(); 
+      };
+      img.src = page.progress || page.original;
+
+      canvas.onmousedown = startStroke;
+      canvas.onmousemove = moveStroke;
+      canvas.onmouseup = endStroke;
+
+      canvas.ontouchstart = (e) => { e.preventDefault(); startStroke(e.touches[0]); };
+      canvas.ontouchmove = (e) => { e.preventDefault(); moveStroke(e.touches[0]); };
+      canvas.ontouchend = endStroke;
+    }
+
+    function saveStateToHistory() {
+      const canvas = document.getElementById('paint-canvas');
+      if (undoHistory.length >= MAX_UNDO_STEPS) {
+        undoHistory.shift();
+      }
+      undoHistory.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+    }
+
+    function undoStroke() {
+      if (undoHistory.length > 1) {
+        undoHistory.pop(); 
+        const previousState = undoHistory[undoHistory.length - 1];
+        ctx.putImageData(previousState, 0, 0);
+      }
+    }
+
+    function setCanvasZoom(val) {
+      currentZoom = val / 100;
+      document.getElementById('zoom-val').innerText = val;
+      const canvas = document.getElementById('paint-canvas');
+      canvas.style.transform = `scale(${currentZoom})`;
+    }
+
+    function getCoords(e) {
+      const canvas = document.getElementById('paint-canvas');
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: Math.floor((e.clientX - rect.left) / currentZoom),
+        y: Math.floor((e.clientY - rect.top) / currentZoom)
+      };
+    }
+
+    function hexToRgba(hex) {
+      const num = parseInt(hex.replace('#', ''), 16);
+      return [
+        (num >> 16) & 255,
+        (num >> 8) & 255,
+        num & 255,
+        255
+      ];
+    }
+
+    // Алгоритм Flood Fill (Заливка)
+    function floodFill(startX, startY, fillColorHex) {
+      const canvas = document.getElementById('paint-canvas');
+      const width = canvas.width;
+      const height = canvas.height;
+      
+      if (startX < 0 || startX >= width || startY < 0 || startY >= height) return;
+
+      const imgData = ctx.getImageData(0, 0, width, height);
+      const data = imgData.data;
+
+      const targetPos = (startY * width + startX) * 4;
+      const targetR = data[targetPos];
+      const targetG = data[targetPos + 1];
+      const targetB = data[targetPos + 2];
+      const targetA = data[targetPos + 3];
+
+      const fillRgb = hexToRgba(fillColorHex);
+
+      // Если цвет совпадает, не заливаем
+      if (Math.abs(targetR - fillRgb[0]) < 10 &&
+          Math.abs(targetG - fillRgb[1]) < 10 &&
+          Math.abs(targetB - fillRgb[2]) < 10) return;
+
+      const tolerance = 60; // Допуск по цвету для красивого прилегания к контурам
+
+      function matchColor(pos) {
+        const r = data[pos];
+        const g = data[pos + 1];
+        const b = data[pos + 2];
+        const a = data[pos + 3];
+
+        return Math.abs(r - targetR) <= tolerance &&
+               Math.abs(g - targetG) <= tolerance &&
+               Math.abs(b - targetB) <= tolerance &&
+               Math.abs(a - targetA) <= tolerance;
+      }
+
+      const pixelStack = [[startX, startY]];
+
+      while (pixelStack.length > 0) {
+        const newPos = pixelStack.pop();
+        const x = newPos[0];
+        let y = newPos[1];
+
+        let pixelPos = (y * width + x) * 4;
+
+        while (y >= 0 && matchColor(pixelPos)) {
+          y--;
+          pixelPos -= width * 4;
+        }
+
+        pixelPos += width * 4;
+        y++;
+
+        let reachLeft = false;
+        let reachRight = false;
+
+        while (y < height && matchColor(pixelPos)) {
+          data[pixelPos] = fillRgb[0];
+          data[pixelPos + 1] = fillRgb[1];
+          data[pixelPos + 2] = fillRgb[2];
+          data[pixelPos + 3] = 255;
+
+          if (x > 0) {
+            if (matchColor(pixelPos - 4)) {
+              if (!reachLeft) {
+                pixelStack.push([x - 1, y]);
+                reachLeft = true;
+              }
+            } else if (reachLeft) {
+              reachLeft = false;
+            }
+          }
+
+          if (x < width - 1) {
+            if (matchColor(pixelPos + 4)) {
+              if (!reachRight) {
+                pixelStack.push([x + 1, y]);
+                reachRight = true;
+              }
+            } else if (reachRight) {
+              reachRight = false;
+            }
+          }
+
+          y++;
+          pixelPos += width * 4;
+        }
+      }
+
+      ctx.putImageData(imgData, 0, 0);
+      saveStateToHistory();
+    }
+
+    function startStroke(e) {
+      const type = document.getElementById('brush-type').value;
+      const coords = getCoords(e);
+
+      if (type === 'fill') {
+        const color = document.getElementById('color-picker').value;
+        floodFill(coords.x, coords.y, color);
+        return;
+      }
+
+      isDrawing = true;
+      lastX = coords.x;
+      lastY = coords.y;
+      lastTime = Date.now();
+      currentLineWidth = parseInt(document.getElementById('brush-size').value);
+      draw(e);
+    }
+
+    function moveStroke(e) {
+      if (!isDrawing) return;
+      draw(e);
+    }
+
+    function endStroke() {
+      if (!isDrawing) return;
+      const type = document.getElementById('brush-type').value;
+
+      if (type === 'tapered' || type === 'japanese') {
+        let fadeSteps = 5;
+        let fadeWidth = currentLineWidth;
+        let stepX = (lastX - (lastX - 2)) / fadeSteps;
+        let stepY = (lastY - (lastY - 2)) / fadeSteps;
+
+        const fadeInterval = setInterval(() => {
+          if (fadeSteps <= 0 || fadeWidth <= 0.5) {
+            clearInterval(fadeInterval);
+            isDrawing = false;
+            if (ctx) ctx.beginPath();
+            saveStateToHistory(); 
+            return;
+          }
+
+          ctx.beginPath();
+          ctx.strokeStyle = document.getElementById('color-picker').value;
+          ctx.lineWidth = fadeWidth;
+          ctx.lineCap = 'round';
+          ctx.moveTo(lastX, lastY);
+          
+          lastX += stepX;
+          lastY += stepY;
+          ctx.lineTo(lastX, lastY);
+          ctx.stroke();
+
+          fadeWidth *= 0.6;
+          fadeSteps--;
+        }, 10);
+      } else {
+        isDrawing = false;
+        if (ctx) ctx.beginPath();
+        saveStateToHistory(); 
+      }
+    }
+
+    function draw(e) {
+      if (!isDrawing) return;
+      const coords = getCoords(e);
+      const x = coords.x;
+      const y = coords.y;
+
+      const color = document.getElementById('color-picker').value;
+      const baseSize = parseInt(document.getElementById('brush-size').value);
+      const type = document.getElementById('brush-type').value;
+
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+
+      if (type === 'tapered') {
+        const now = Date.now();
+        const dist = Math.hypot(x - lastX, y - lastY);
+        const time = Math.max(1, now - lastTime);
+        const speed = dist / time;
+
+        const targetWidth = Math.max(1, baseSize - speed * 1.5);
+        currentLineWidth = currentLineWidth * 0.7 + targetWidth * 0.3;
+
+        ctx.lineWidth = currentLineWidth;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        lastTime = now;
+
+      } else if (type === 'round') {
+        ctx.lineWidth = baseSize;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+
+      } else if (type === 'pencil') {
+        ctx.lineWidth = Math.max(1, baseSize * 0.5);
+        ctx.lineCap = 'round';
+        ctx.globalAlpha = 0.4;
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.globalAlpha = 1.0;
+
+      } else if (type === 'chisel') {
+        ctx.lineWidth = baseSize;
+        ctx.lineCap = 'square';
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+
+      } else if (type === 'japanese') {
+        const now = Date.now();
+        const dist = Math.hypot(x - lastX, y - lastY);
+        const time = Math.max(1, now - lastTime);
+        const speed = dist / time;
+        
+        currentLineWidth = Math.max(2, baseSize - speed * 3);
+        ctx.lineWidth = currentLineWidth;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        lastTime = now;
+
+      } else if (type === 'soft') {
+        ctx.lineWidth = baseSize;
+        ctx.lineCap = 'round';
+        ctx.globalAlpha = 0.2;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = baseSize / 2;
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.globalAlpha = 1.0;
+        ctx.shadowBlur = 0;
+
+      } else if (type === 'spray') {
+        ctx.shadowBlur = 0;
+        const density = baseSize * 2;
+        for (let i = 0; i < density; i++) {
+          const offsetX = (Math.random() - 0.5) * baseSize * 2;
+          const offsetY = (Math.random() - 0.5) * baseSize * 2;
+          if (Math.hypot(offsetX, offsetY) <= baseSize) {
+            ctx.fillRect(x + offsetX, y + offsetY, 1, 1);
+          }
+        }
+      }
+
+      lastX = x;
+      lastY = y;
+    }
+
+    async function activateEyedropper() {
+      if ('EyeDropper' in window) {
+        const eyeDropper = new EyeDropper();
+        try {
+          const result = await eyeDropper.open();
+          document.getElementById('color-picker').value = result.sRGBHex;
+        } catch (e) { console.log("Отмена"); }
+      } else {
+        alert("Пипетка поддерживает мобильные браузеры Chrome/Edge.");
+      }
+    }
+
+    function saveDrawing() {
+      const canvas = document.getElementById('paint-canvas');
+      currentBook.pages[currentPageIndex].progress = canvas.toDataURL('image/jpeg', 0.8);
+      saveBookToDB();
+      alert("Сохранено!");
+    }
+
+    function saveBookToDB() {
+      const tx = db.transaction("books", "readwrite");
+      tx.objectStore("books").put(currentBook);
+    }
+
+    function closeEditor() {
+      showView('book-view');
+      renderPagesGrid();
+    }
+
+    function changeScale(scale) {
+      document.getElementById('pages-grid').style.transform = `scale(${scale})`;
+      document.getElementById('pages-grid').style.transformOrigin = 'top left';
+    }
+  </script>
 </body>
 </html>

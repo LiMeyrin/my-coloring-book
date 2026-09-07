@@ -147,6 +147,7 @@
       
       <label>Инструмент:</label>
       <select id="brush-type">
+        <option value="none">— Не выбрано —</option>
         <option value="fill">🪣 Заливка</option>
         <option value="tapered">✨ Плавная (Острый кончик)</option>
         <option value="round">⚪ Круглая кисть</option>
@@ -194,13 +195,13 @@
     let lastTime = 0;
     let currentLineWidth = 10;
     
-    // Параметры трансформирования (Pan & Zoom)
+    // Трансформации (панорамирование и масштаб)
     let zoomScale = 1;
     let panX = 0, panY = 0;
     let isPanning = false;
     let startPanX = 0, startPanY = 0;
 
-    // Управление touch-точками
+    // Управление касаниями пальцами
     let touchPointers = new Map();
     let initialPinchDist = null;
     let initialZoomOnPinch = 1;
@@ -362,6 +363,9 @@
       ctx = canvas.getContext('2d');
       const page = currentBook.pages[currentPageIndex];
 
+      // По умолчанию выбран прочерк "Не выбрано"
+      document.getElementById('brush-type').value = 'none';
+
       zoomScale = 1;
       panX = 0;
       panY = 0;
@@ -378,7 +382,6 @@
       };
       img.src = page.progress || page.original;
 
-      // Обработка событий
       wrapper.onpointerdown = handlePointerDown;
       wrapper.onpointermove = handlePointerMove;
       wrapper.onpointerup = handlePointerUp;
@@ -397,9 +400,9 @@
       updateTransform();
     }
 
-    // Определение: является ли устройство/касание стилусом
-    function isStylus(e) {
-      return e.pointerType === 'pen' || (e.pressure && e.pressure > 0 && e.pressure !== 0.5);
+    // Проверка: касание выполнено ИМЕННО СТИЛУСОМ
+    function isPen(e) {
+      return e.pointerType === 'pen';
     }
 
     function handlePointerDown(e) {
@@ -407,12 +410,13 @@
         touchPointers.set(e.pointerId, e);
       }
 
-      // 1. ЕСЛИ РИСУЕМ СТИЛУСОМ ИЛИ МЫШЬЮ
-      if (isStylus(e) || e.pointerType === 'mouse') {
-        const type = document.getElementById('brush-type').value;
+      const brushType = document.getElementById('brush-type').value;
+
+      // 1. РИСОВАНИЕ ТОЛЬКО ЕСЛИ СТИЛУС И ВЫБРАН ИНСТРУМЕНТ
+      if (isPen(e) && brushType !== 'none') {
         const coords = getCoords(e);
 
-        if (type === 'fill') {
+        if (brushType === 'fill') {
           const color = document.getElementById('color-picker').value;
           floodFill(coords.x, coords.y, color);
           return;
@@ -427,16 +431,18 @@
         return;
       }
 
-      // 2. ЕСЛИ КАСАНИЕ ПАЛЬЦАМИ (Панорамирование или Масштабирование)
-      if (touchPointers.size === 1) {
-        isPanning = true;
-        startPanX = e.clientX - panX;
-        startPanY = e.clientY - panY;
-      } else if (touchPointers.size === 2) {
-        isPanning = false;
-        const pts = Array.from(touchPointers.values());
-        initialPinchDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
-        initialZoomOnPinch = zoomScale;
+      // 2. ДВИЖЕНИЯ ПАЛЬЦЕВ (ПЕРАМЕЩЕНИЕ И ЗУМ)
+      if (e.pointerType === 'touch' || e.pointerType === 'mouse') {
+        if (touchPointers.size === 1) {
+          isPanning = true;
+          startPanX = e.clientX - panX;
+          startPanY = e.clientY - panY;
+        } else if (touchPointers.size === 2) {
+          isPanning = false;
+          const pts = Array.from(touchPointers.values());
+          initialPinchDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
+          initialZoomOnPinch = zoomScale;
+        }
       }
     }
 
@@ -445,13 +451,13 @@
         touchPointers.set(e.pointerId, e);
       }
 
-      // 1. ДВИЖЕНИЕ СТИЛУСА / МЫШИ (РИСОВАНИЕ)
-      if (isDrawing && (isStylus(e) || e.pointerType === 'mouse')) {
+      // 1. РИСОВАНИЕ СТИЛУСОМ
+      if (isDrawing && isPen(e)) {
         draw(e);
         return;
       }
 
-      // 2. ДВИЖЕНИЕ ДВУХ ПАЛЬЦЕВ (МАСШТАБ)
+      // 2. МАСШТАБИРОВАНИЕ ДВУМЯ ПАЛЬЦАМИ
       if (touchPointers.size === 2 && initialPinchDist) {
         const pts = Array.from(touchPointers.values());
         const currentDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
@@ -462,8 +468,8 @@
         return;
       }
 
-      // 3. ДВИЖЕНИЕ ОДНОГО ПАЛЬЦА (ПЕРЕМЕЩЕНИЕ КАРТИНКИ)
-      if (isPanning && touchPointers.size === 1) {
+      // 3. СДВИГ ХОЛСТА ОДНИМ ПАЛЬЦЕМ ИЛИ МЫШЬЮ
+      if (isPanning && (touchPointers.size === 1 || e.pointerType === 'mouse')) {
         panX = e.clientX - startPanX;
         panY = e.clientY - startPanY;
         updateTransform();

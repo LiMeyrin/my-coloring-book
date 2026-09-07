@@ -12,7 +12,10 @@
       --primary: #6c5ce7;
       --primary-hover: #5a4bcf;
     }
-    * { touch-action: manipulation; box-sizing: border-box; }
+    * { 
+      touch-action: none; /* Отключаем стандартные жесты браузера (скролл/зум) на всём приложении */
+      box-sizing: border-box; 
+    }
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       margin: 0; padding: 15px;
@@ -22,7 +25,6 @@
     .hidden { display: none !important; }
     header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
     
-    /* Кнопки */
     .btn {
       background: var(--primary); color: white; border: none;
       padding: 10px 16px; border-radius: 8px; cursor: pointer;
@@ -33,7 +35,6 @@
     .btn-secondary { background: #b2bec3; }
     .btn-danger { background: #ff7675; }
 
-    /* Сетки */
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -47,7 +48,6 @@
     .card:hover { transform: translateY(-3px); }
     .card img { width: 100%; height: 160px; object-fit: cover; border-radius: 8px; }
 
-    /* Модалка страницы */
     .modal {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
       background: rgba(0,0,0,0.8); display: flex;
@@ -57,7 +57,6 @@
     .modal img { max-width: 90vw; max-height: 65vh; border-radius: 8px; background: white; object-fit: contain; }
     .modal-actions { margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 
-    /* Редактор адаптивный */
     #editor-view { 
       display: flex; 
       flex-direction: row; 
@@ -69,6 +68,7 @@
       width: 230px; background: white; padding: 12px; border-radius: 12px;
       display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);
       overflow-y: auto; flex-shrink: 0;
+      touch-action: pan-y; /* Важно: разрешает скроллить панель инструментов пальцем */
     }
     .toolbar label { font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; }
     .toolbar select, .toolbar input[type="range"] { width: 100%; margin-top: 4px; }
@@ -83,13 +83,14 @@
       border-radius: 12px; 
       padding: 20px; 
       position: relative;
+      touch-action: pan-x pan-y; /* Позволяет скроллить холст при приближении */
     }
     
     canvas { 
       background: white; 
       border-radius: 8px; 
       box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
-      touch-action: none; 
+      touch-action: none; /* Запрещает скроллить сам холст пальцем/стилусом при рисовании */
       transform-origin: top left;
     }
 
@@ -352,13 +353,11 @@
       };
       img.src = page.progress || page.original;
 
-      canvas.onmousedown = startStroke;
-      canvas.onmousemove = moveStroke;
-      canvas.onmouseup = endStroke;
-
-      canvas.ontouchstart = (e) => { e.preventDefault(); startStroke(e.touches[0]); };
-      canvas.ontouchmove = (e) => { e.preventDefault(); moveStroke(e.touches[0]); };
-      canvas.ontouchend = endStroke;
+      // Универсальные события для поддержки Стилуса, Пальца и Мыши
+      canvas.onpointerdown = startStroke;
+      canvas.onpointermove = moveStroke;
+      canvas.onpointerup = endStroke;
+      canvas.onpointercancel = endStroke;
     }
 
     function saveStateToHistory() {
@@ -403,7 +402,6 @@
       ];
     }
 
-    // Умная заливка с детекцией линй и контуров
     function floodFill(startX, startY, fillColorHex) {
       const canvas = document.getElementById('paint-canvas');
       const width = canvas.width;
@@ -495,6 +493,11 @@
     }
 
     function startStroke(e) {
+      // Блокируем захват указателя браузером, чтобы линия не «рвалась» при быстром ведении
+      if (e.target.setPointerCapture) {
+        e.target.setPointerCapture(e.pointerId);
+      }
+
       const type = document.getElementById('brush-type').value;
       const coords = getCoords(e);
 
@@ -517,8 +520,12 @@
       draw(e);
     }
 
-    function endStroke() {
+    function endStroke(e) {
       if (!isDrawing) return;
+      if (e && e.target.releasePointerCapture) {
+        e.target.releasePointerCapture(e.pointerId);
+      }
+
       const type = document.getElementById('brush-type').value;
 
       if (type === 'tapered' || type === 'japanese') {
@@ -564,7 +571,13 @@
       const y = coords.y;
 
       const color = document.getElementById('color-picker').value;
-      const baseSize = parseInt(document.getElementById('brush-size').value);
+      let baseSize = parseInt(document.getElementById('brush-size').value);
+      
+      // Учитываем силу нажатия стилуса, если планшет её передаёт
+      if (e.pressure && e.pressure > 0) {
+        baseSize = baseSize * e.pressure * 1.5;
+      }
+
       const type = document.getElementById('brush-type').value;
 
       ctx.strokeStyle = color;

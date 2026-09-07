@@ -44,12 +44,52 @@
     .card {
       background: var(--card-bg); border-radius: 12px; padding: 10px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.05); text-align: center;
-      cursor: pointer; transition: transform 0.2s;
+      cursor: pointer; transition: transform 0.2s, border 0.2s;
       display: flex; flex-direction: column; justify-content: space-between;
+      border: 3px solid transparent;
+    }
+    .card.completed-book {
+      border-color: var(--success);
     }
     .card:hover { transform: translateY(-3px); }
     .card img { width: 100%; height: 150px; object-fit: cover; border-radius: 8px; }
     .card p { margin: 8px 0 4px 0; font-size: 13px; font-weight: 600; }
+
+    .book-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 8px;
+      padding-top: 6px;
+      border-top: 1px solid #f1f3f6;
+    }
+    .book-footer span {
+      font-size: 11px;
+      color: #636e72;
+    }
+    .status-circle {
+      width: 22px;
+      height: 22px;
+      border: 2px solid #b2bec3;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      background: #fff;
+      transition: all 0.2s;
+      font-size: 12px;
+      color: transparent;
+      user-select: none;
+    }
+    .status-circle:hover {
+      border-color: var(--success);
+    }
+    .status-circle.checked {
+      background: var(--success);
+      border-color: var(--success);
+      color: white;
+    }
 
     .progress-bar-container {
       width: 100%;
@@ -410,7 +450,7 @@
 
         if (pages.length === 0) return;
 
-        const book = { title, cover: pages[0].original, pages };
+        const book = { title, cover: pages[0].original, pages, isCompleted: false };
         const tx = db.transaction("books", "readwrite");
         const store = tx.objectStore("books");
         
@@ -437,11 +477,44 @@
         grid.innerHTML = '';
         req.result.forEach(book => {
           const card = document.createElement('div');
-          card.className = 'card';
-          card.innerHTML = `<img src="${book.cover}"><h3>${book.title}</h3>`;
-          card.onclick = () => openBook(book);
+          card.className = `card ${book.isCompleted ? 'completed-book' : ''}`;
+          
+          card.innerHTML = `
+            <div onclick="openBookFromId(${book.id})">
+              <img src="${book.cover}">
+              <h3>${book.title}</h3>
+            </div>
+            <div class="book-footer" onclick="event.stopPropagation()">
+              <span>Завершено</span>
+              <div class="status-circle ${book.isCompleted ? 'checked' : ''}" onclick="toggleBookCompletion(${book.id}, event)">✓</div>
+            </div>
+          `;
           grid.appendChild(card);
         });
+      };
+    }
+
+    function openBookFromId(id) {
+      const tx = db.transaction("books", "readonly");
+      const store = tx.objectStore("books");
+      const req = store.get(id);
+      req.onsuccess = () => {
+        if (req.result) openBook(req.result);
+      };
+    }
+
+    function toggleBookCompletion(id, event) {
+      event.stopPropagation();
+      const tx = db.transaction("books", "readwrite");
+      const store = tx.objectStore("books");
+      const req = store.get(id);
+      req.onsuccess = () => {
+        const book = req.result;
+        if (book) {
+          book.isCompleted = !book.isCompleted;
+          const putReq = store.put(book);
+          putReq.onsuccess = () => loadBooks();
+        }
       };
     }
 
@@ -852,7 +925,6 @@
       ctx.restore();
     }
 
-    // Подсчет процента закрашивания внутри границ контура
     async function calculateCompletionPercentage(originalDataUrl, progressDataUrl) {
       return new Promise((resolve) => {
         const imgOrig = new Image();
@@ -864,11 +936,9 @@
             canvas.height = imgOrig.height;
             const c = canvas.getContext('2d');
 
-            // 1. Получаем пиксели оригинала
             c.drawImage(imgOrig, 0, 0);
             const origData = c.getImageData(0, 0, canvas.width, canvas.height).data;
 
-            // 2. Получаем пиксели прогресса
             c.clearRect(0, 0, canvas.width, canvas.height);
             c.drawImage(imgProg, 0, 0);
             const progData = c.getImageData(0, 0, canvas.width, canvas.height).data;
@@ -876,13 +946,11 @@
             let totalColorable = 0;
             let coloredCount = 0;
 
-            // Семплируем пиксели через один для быстродействия
             for (let i = 0; i < origData.length; i += 8) {
               const r = origData[i];
               const g = origData[i + 1];
               const b = origData[i + 2];
               
-              // Если пиксель оригинала светлый (белый фон внутри контура)
               const brightness = (r + g + b) / 3;
               if (brightness >= 200) {
                 totalColorable++;
@@ -892,7 +960,6 @@
                 const pb = progData[i + 2];
                 const pBrightness = (pr + pg + pb) / 3;
 
-                // Если пиксель закрашен (стал темнее или цветным)
                 if (pBrightness < 200) {
                   coloredCount++;
                 }
@@ -920,7 +987,6 @@
       const page = currentBook.pages[currentPageIndex];
       page.progress = progressDataUrl;
 
-      // Вычисляем процент заполнения внутри границ
       const percent = await calculateCompletionPercentage(page.original, progressDataUrl);
       page.progressPercent = percent;
 

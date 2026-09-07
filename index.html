@@ -76,6 +76,39 @@
     .toolbar label { font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; }
     .toolbar select, .toolbar input[type="range"] { width: 100%; margin-top: 4px; padding: 6px; }
     
+    /* Кнопка выбора цвета */
+    .color-preview-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #f1f3f6;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      padding: 6px 10px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 13px;
+    }
+    .color-box {
+      width: 26px; height: 26px; border-radius: 50%;
+      border: 2px solid #fff; box-shadow: 0 0 4px rgba(0,0,0,0.3);
+    }
+
+    /* Модальное окно Палитры */
+    .palette-card {
+      background: white; border-radius: 16px; padding: 20px;
+      width: 320px; max-width: 90vw; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      display: flex; flex-direction: column; gap: 15px; align-items: center;
+    }
+    .preset-colors {
+      display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; width: 100%;
+    }
+    .color-swatch {
+      width: 100%; aspect-ratio: 1; border-radius: 50%; cursor: pointer;
+      border: 2px solid transparent; transition: transform 0.1s;
+    }
+    .color-swatch:hover { transform: scale(1.15); }
+
     .canvas-wrapper { 
       flex: 1; 
       display: flex; 
@@ -140,6 +173,41 @@
     <div class="modal-actions" id="modal-actions"></div>
   </div>
 
+  <!-- Окно выбора цвета (Палитра) -->
+  <div id="color-modal" class="modal hidden">
+    <div class="palette-card">
+      <h3>Выбор цвета</h3>
+      <button class="btn" style="width: 100%;" onclick="activateEyedropper()">🔍 Включить пипетку</button>
+      
+      <label style="align-self: flex-start; font-size: 13px; font-weight: 600;">Свой цвет:</label>
+      <input type="color" id="native-color-picker" style="width: 100%; height: 45px; border-radius: 8px; border: none; cursor: pointer;" onchange="setColor(this.value)">
+
+      <label style="align-self: flex-start; font-size: 13px; font-weight: 600;">Готовые палитры:</label>
+      <div class="preset-colors">
+        <div class="color-swatch" style="background: #000000" onclick="setColor('#000000')"></div>
+        <div class="color-swatch" style="background: #ffffff; border-color: #ccc" onclick="setColor('#ffffff')"></div>
+        <div class="color-swatch" style="background: #ff7675" onclick="setColor('#ff7675')"></div>
+        <div class="color-swatch" style="background: #d63031" onclick="setColor('#d63031')"></div>
+        <div class="color-swatch" style="background: #e17055" onclick="setColor('#e17055')"></div>
+        <div class="color-swatch" style="background: #fdcb6e" onclick="setColor('#fdcb6e')"></div>
+        <div class="color-swatch" style="background: #ffeaa7" onclick="setColor('#ffeaa7')"></div>
+        <div class="color-swatch" style="background: #55efc4" onclick="setColor('#55efc4')"></div>
+        <div class="color-swatch" style="background: #00b894" onclick="setColor('#00b894')"></div>
+        <div class="color-swatch" style="background: #74b9ff" onclick="setColor('#74b9ff')"></div>
+        <div class="color-swatch" style="background: #0984e3" onclick="setColor('#0984e3')"></div>
+        <div class="color-swatch" style="background: #6c5ce7" onclick="setColor('#6c5ce7')"></div>
+        <div class="color-swatch" style="background: #a29bfe" onclick="setColor('#a29bfe')"></div>
+        <div class="color-swatch" style="background: #fd79a8" onclick="setColor('#fd79a8')"></div>
+        <div class="color-swatch" style="background: #e84393" onclick="setColor('#e84393')"></div>
+        <div class="color-swatch" style="background: #81ecec" onclick="setColor('#81ecec')"></div>
+        <div class="color-swatch" style="background: #b2bec3" onclick="setColor('#b2bec3')"></div>
+        <div class="color-swatch" style="background: #636e72" onclick="setColor('#636e72')"></div>
+      </div>
+
+      <button class="btn btn-secondary" style="width: 100%;" onclick="closeColorModal()">Закрыть</button>
+    </div>
+  </div>
+
   <div id="editor-view" class="hidden">
     <div class="toolbar">
       <h3>Инструменты</h3>
@@ -158,7 +226,10 @@
       </select>
 
       <label>Цвет:</label>
-      <input type="color" id="color-picker" value="#ff0000">
+      <div class="color-preview-btn" onclick="openColorModal()">
+        <div class="color-box" id="active-color-box" style="background-color: #ff0000;"></div>
+        <span id="active-color-text">#ff0000</span>
+      </div>
 
       <label>Размер: <span id="brush-size-val">10</span>px</label>
       <input type="range" id="brush-size" min="1" max="60" value="10" oninput="document.getElementById('brush-size-val').innerText = this.value">
@@ -166,7 +237,6 @@
       <label>🔍 Масштаб: <span id="zoom-val">100</span>%</label>
       <input type="range" id="editor-zoom" min="50" max="300" value="100" oninput="setCanvasZoom(this.value / 100)">
 
-      <button class="btn btn-secondary" onclick="activateEyedropper()">🔍 Пипетка</button>
       <button class="btn btn-secondary" onclick="undoStroke()">⎌ Отменить</button>
       
       <hr style="width:100%; border: 0.5px solid #eee; margin: 5px 0;">
@@ -193,6 +263,7 @@
     let lastX = 0, lastY = 0;
     let lastTime = 0;
     let currentLineWidth = 10;
+    let currentColor = '#ff0000';
     
     // Панорамирование и зум
     let zoomScale = 1;
@@ -223,6 +294,35 @@
     function showView(viewId) {
       document.querySelectorAll('#main-view, #book-view, #editor-view').forEach(v => v.classList.add('hidden'));
       document.getElementById(viewId).classList.remove('hidden');
+    }
+
+    function openColorModal() {
+      document.getElementById('color-modal').classList.remove('hidden');
+    }
+
+    function closeColorModal() {
+      document.getElementById('color-modal').classList.add('hidden');
+    }
+
+    function setColor(hex) {
+      currentColor = hex;
+      document.getElementById('active-color-box').style.backgroundColor = hex;
+      document.getElementById('active-color-text').innerText = hex;
+      document.getElementById('native-color-picker').value = hex;
+      closeColorModal();
+    }
+
+    async function activateEyedropper() {
+      closeColorModal();
+      if ('EyeDropper' in window) {
+        const eyeDropper = new EyeDropper();
+        try {
+          const result = await eyeDropper.open();
+          setColor(result.sRGBHex);
+        } catch (e) { console.log("Отмена выбора пипеткой"); }
+      } else {
+        alert("Пипетка не поддерживается вашей версией браузера.");
+      }
     }
 
     async function uploadPDF(event) {
@@ -403,7 +503,6 @@
 
       const brushType = document.getElementById('brush-type').value;
 
-      // Если 2 и более пальца — переходим в режим панорамирования/зума
       if (activePointers.size >= 2) {
         isDrawing = false;
         isPanning = false;
@@ -413,18 +512,14 @@
         return;
       }
 
-      // ОДИН ПАЛЕЦ / СТИЛУС / МЫШЬ
       if (brushType === 'none') {
-        // Режим перемещения
         isPanning = true;
         startPanX = e.clientX - panX;
         startPanY = e.clientY - panY;
       } else {
-        // Режим рисования
         const coords = getCoords(e);
         if (brushType === 'fill') {
-          const color = document.getElementById('color-picker').value;
-          floodFill(coords.x, coords.y, color);
+          floodFill(coords.x, coords.y, currentColor);
           return;
         }
 
@@ -442,7 +537,6 @@
         activePointers.set(e.pointerId, e);
       }
 
-      // Зум двумя пальцами (Pinch-to-Zoom)
       if (activePointers.size >= 2 && initialPinchDist) {
         const pts = Array.from(activePointers.values());
         const currentDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
@@ -453,13 +547,11 @@
         return;
       }
 
-      // Рисование
       if (isDrawing && activePointers.size === 1) {
         draw(e);
         return;
       }
 
-      // Перемещение
       if (isPanning && activePointers.size === 1) {
         panX = e.clientX - startPanX;
         panY = e.clientY - startPanY;
@@ -618,7 +710,7 @@
           }
 
           ctx.beginPath();
-          ctx.strokeStyle = document.getElementById('color-picker').value;
+          ctx.strokeStyle = currentColor;
           ctx.lineWidth = fadeWidth;
           ctx.lineCap = 'round';
           ctx.moveTo(lastX, lastY);
@@ -644,7 +736,6 @@
       const x = coords.x;
       const y = coords.y;
 
-      const color = document.getElementById('color-picker').value;
       let baseSize = parseInt(document.getElementById('brush-size').value);
       
       if (e.pressure && e.pressure > 0 && e.pressure !== 0.5) {
@@ -653,8 +744,8 @@
 
       const type = document.getElementById('brush-type').value;
 
-      ctx.strokeStyle = color;
-      ctx.fillStyle = color;
+      ctx.strokeStyle = currentColor;
+      ctx.fillStyle = currentColor;
 
       if (type === 'tapered') {
         const now = Date.now();
@@ -726,7 +817,7 @@
         ctx.lineWidth = baseSize;
         ctx.lineCap = 'round';
         ctx.globalAlpha = 0.2;
-        ctx.shadowColor = color;
+        ctx.shadowColor = currentColor;
         ctx.shadowBlur = baseSize / 2;
         ctx.beginPath();
         ctx.moveTo(lastX, lastY);
@@ -749,18 +840,6 @@
 
       lastX = x;
       lastY = y;
-    }
-
-    async function activateEyedropper() {
-      if ('EyeDropper' in window) {
-        const eyeDropper = new EyeDropper();
-        try {
-          const result = await eyeDropper.open();
-          document.getElementById('color-picker').value = result.sRGBHex;
-        } catch (e) { console.log("Отмена"); }
-      } else {
-        alert("Пипетка поддерживается в Chrome / Safari.");
-      }
     }
 
     function saveDrawing() {
